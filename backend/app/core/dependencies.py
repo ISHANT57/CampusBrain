@@ -7,13 +7,17 @@ from app.core.database import get_db
 from app.core.security import decode_access_token
 from app.models.user import User, UserRole
 
-_bearer_scheme = HTTPBearer()
+_bearer_scheme = HTTPBearer(auto_error=False)
 
 
 def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(_bearer_scheme),
+    credentials: HTTPAuthorizationCredentials | None = Depends(_bearer_scheme),
     db: Session = Depends(get_db),
 ) -> User:
+    if credentials is None:
+        # HTTPBearer's own auto_error raises 403 for a missing header, which
+        # conflates "not authenticated" with "authenticated but forbidden".
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
     try:
         payload = decode_access_token(credentials.credentials)
     except JWTError:
