@@ -1,5 +1,6 @@
 import io
 
+# pyrefly: ignore [missing-import]
 from unstructured.partition.auto import partition
 
 
