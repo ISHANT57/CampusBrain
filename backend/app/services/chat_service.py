@@ -43,7 +43,7 @@ def handle_chat(
     db.add(Message(conversation_id=conversation.id, org_id=org_id, role=MessageRole.USER, content=question))
     db.commit()
 
-    result = answer_question(org_id, question, top_k=top_k, history=history or None)
+    result = answer_question(db, org_id, question, top_k=top_k, history=history or None)
 
     db.add(
         Message(

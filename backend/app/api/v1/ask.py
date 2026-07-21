@@ -22,7 +22,7 @@ def ask(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    result = answer_question(current_user.org_id, payload.question, payload.top_k)
+    result = answer_question(db, current_user.org_id, payload.question, payload.top_k)
 
     doc_repo = DocumentRepository(db, current_user.org_id)
     citations = []

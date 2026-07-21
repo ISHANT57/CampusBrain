@@ -1,5 +1,7 @@
 # pyrefly: ignore [missing-import]
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, String
+from sqlalchemy import Column, Computed, DateTime, ForeignKey, Index, Integer, String
+# pyrefly: ignore [missing-import]
+from sqlalchemy.dialects.postgresql import TSVECTOR
 # pyrefly: ignore [missing-import]
 from sqlalchemy.sql import func
 
@@ -17,4 +19,11 @@ class Chunk(Base):
     page_number = Column(Integer, nullable=False)
     chunk_index = Column(Integer, nullable=False)
     text = Column(String, nullable=False)
+    # Generated column: Postgres maintains the tsvector itself for existing and
+    # future rows, so keyword search needs no application code and no backfill.
+    search_vector = Column(TSVECTOR, Computed("to_tsvector('english', text)", persisted=True))
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    __table_args__ = (
+        Index("ix_chunks_search_vector", "search_vector", postgresql_using="gin"),
+    )

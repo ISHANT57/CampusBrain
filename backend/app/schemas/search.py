@@ -1,9 +1,12 @@
+from typing import Literal
+
 from pydantic import BaseModel
 
 
 class SearchRequest(BaseModel):
     query: str
     top_k: int = 5
+    mode: Literal["semantic", "keyword", "hybrid"] = "hybrid"
 
 
 class SearchHit(BaseModel):
