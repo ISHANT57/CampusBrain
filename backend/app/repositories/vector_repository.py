@@ -1,5 +1,6 @@
+# pyrefly: ignore [missing-import]
 from qdrant_client.models import PointStruct
-
+# pyrefly: ignore [missing-import]
 from app.infrastructure import vector_store
 
 

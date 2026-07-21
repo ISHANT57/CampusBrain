@@ -27,7 +27,9 @@ def handle_chat(
         db.commit()
         db.refresh(conversation)
     else:
-        conversation = conv_repo.get(conversation_id)
+        # get_for_user, not get: a client-supplied conversation_id must belong
+        # to this user, not just this org.
+        conversation = conv_repo.get_for_user(conversation_id, user_id)
         if conversation is None:
             raise ConversationNotFoundError(conversation_id)
 

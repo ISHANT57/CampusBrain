@@ -1,6 +1,8 @@
 import enum
 
+# pyrefly: ignore [missing-import]
 from sqlalchemy import Column, DateTime, Enum, ForeignKey, Integer, String
+# pyrefly: ignore [missing-import]
 from sqlalchemy.sql import func
 
 from app.core.database import Base
