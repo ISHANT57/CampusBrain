@@ -34,7 +34,7 @@ class Settings(BaseSettings):
     openrouter_api_key: str = ""
     # Change LLM_MODEL in .env to try other OpenRouter models. Default is a
     # free-tier model to avoid unexpected cost.
-    llm_model: str = "google/gemma-4-31b-it:free"
+    llm_model: str = "openai/gpt-oss-20b:free"
 
     @property
     def ollama_url(self) -> str:
