@@ -26,6 +26,10 @@ class Settings(BaseSettings):
     ollama_host: str = "ollama"
     ollama_internal_port: int = 11434
     embedding_model: str = "bge-m3"
+    embedding_dim: int = 1024  # BGE-M3 output size (verified in M28)
+
+    qdrant_host: str = "qdrant"
+    qdrant_internal_port: int = 6333
 
     @property
     def ollama_url(self) -> str:
