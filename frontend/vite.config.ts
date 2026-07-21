@@ -6,5 +6,15 @@ export default defineConfig({
   server: {
     host: "0.0.0.0",
     port: 5173,
+    // Same-origin API calls: browser hits /api/*, Vite forwards to the backend
+    // container over the Docker network. Avoids CORS and works behind any
+    // Codespaces/prod forwarded URL.
+    proxy: {
+      "/api": {
+        target: "http://backend:8000",
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api/, ""),
+      },
+    },
   },
 });
