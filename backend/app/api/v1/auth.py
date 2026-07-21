@@ -14,9 +14,11 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 @router.post("/register", response_model=UserRead, status_code=status.HTTP_201_CREATED)
 def register(payload: RegisterRequest, db: Session = Depends(get_db)):
+    # Public self-registration is always Student. Faculty/Admin creation
+    # will be a separate authenticated endpoint (not built yet).
     try:
         user = register_user(
-            db, org_id=payload.org_id, email=payload.email, password=payload.password, role=payload.role
+            db, org_id=payload.org_id, email=payload.email, password=payload.password, role=UserRole.STUDENT
         )
     except EmailAlreadyExistsError:
         raise HTTPException(

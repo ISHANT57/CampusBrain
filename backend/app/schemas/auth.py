@@ -1,13 +1,13 @@
 from pydantic import BaseModel, EmailStr
 
-from app.models.user import UserRole
-
 
 class RegisterRequest(BaseModel):
+    # No `role` field: public self-registration always creates a Student
+    # (see register() in api/v1/auth.py). Creating Faculty/Admin accounts
+    # requires an authenticated admin-only endpoint, not built yet.
     org_id: int
     email: EmailStr
     password: str
-    role: UserRole
 
 
 class LoginRequest(BaseModel):
