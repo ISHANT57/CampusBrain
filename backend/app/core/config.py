@@ -20,6 +20,9 @@ class Settings(BaseSettings):
     minio_internal_port: int = 9000
     minio_bucket_name: str = "documents"
 
+    redis_host: str = "redis"
+    redis_internal_port: int = 6379
+
     @property
     def database_url(self) -> str:
         return (

@@ -10,3 +10,4 @@ email-validator==2.2.0
 minio==7.2.9
 python-magic==0.4.27
 python-multipart==0.0.12
+arq==0.26.1
