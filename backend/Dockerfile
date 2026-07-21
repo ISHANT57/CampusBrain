@@ -4,9 +4,10 @@ WORKDIR /app
 
 # libmagic1: python-magic's content-sniffing library.
 # libgl1/libglib2.0-0: opencv (PaddleOCR's dependency) needs these on slim Debian.
+# libgomp1: paddlepaddle's compiled core is linked against OpenMP and won't import without it.
 # fonts-dejavu-core: lets test fixtures render real, OCR-legible text.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libmagic1 libgl1 libglib2.0-0 fonts-dejavu-core \
+    libmagic1 libgl1 libglib2.0-0 libgomp1 fonts-dejavu-core \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
