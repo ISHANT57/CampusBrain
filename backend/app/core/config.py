@@ -23,6 +23,14 @@ class Settings(BaseSettings):
     redis_host: str = "redis"
     redis_internal_port: int = 6379
 
+    ollama_host: str = "ollama"
+    ollama_internal_port: int = 11434
+    embedding_model: str = "bge-m3"
+
+    @property
+    def ollama_url(self) -> str:
+        return f"http://{self.ollama_host}:{self.ollama_internal_port}"
+
     @property
     def database_url(self) -> str:
         return (
