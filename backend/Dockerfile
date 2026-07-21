@@ -2,9 +2,11 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-# libmagic1: shared library python-magic binds to for real content sniffing
-# (not just trusting the client's Content-Type header or filename extension).
-RUN apt-get update && apt-get install -y --no-install-recommends libmagic1 \
+# libmagic1: python-magic's content-sniffing library.
+# libgl1/libglib2.0-0: opencv (PaddleOCR's dependency) needs these on slim Debian.
+# fonts-dejavu-core: lets test fixtures render real, OCR-legible text.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libmagic1 libgl1 libglib2.0-0 fonts-dejavu-core \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .

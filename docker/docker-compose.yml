@@ -21,6 +21,7 @@ services:
       - "8000:8000"
     volumes:
       - ../backend:/app
+      - paddleocr_models:/root/.paddleocr
     depends_on:
       postgres:
         condition: service_healthy
@@ -35,6 +36,7 @@ services:
       - ../.env
     volumes:
       - ../backend:/app
+      - paddleocr_models:/root/.paddleocr
     depends_on:
       postgres:
         condition: service_healthy
@@ -102,3 +104,4 @@ volumes:
   minio_data:
   qdrant_data:
   ollama_data:
+  paddleocr_models:
