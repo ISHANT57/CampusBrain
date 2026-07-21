@@ -14,12 +14,22 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 60
 
+    minio_root_user: str
+    minio_root_password: str
+    minio_host: str = "minio"
+    minio_internal_port: int = 9000
+    minio_bucket_name: str = "documents"
+
     @property
     def database_url(self) -> str:
         return (
             f"postgresql+psycopg2://{self.postgres_user}:{self.postgres_password}"
             f"@{self.postgres_host}:{self.postgres_internal_port}/{self.postgres_db}"
         )
+
+    @property
+    def minio_endpoint(self) -> str:
+        return f"{self.minio_host}:{self.minio_internal_port}"
 
 
 settings = Settings()
