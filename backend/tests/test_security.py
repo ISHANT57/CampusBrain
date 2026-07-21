@@ -9,6 +9,7 @@ the bug fails here instead of in production.
 import uuid
 
 import pytest
+# pyrefly: ignore [missing-import]
 from fastapi.testclient import TestClient
 
 from app.core.database import SessionLocal

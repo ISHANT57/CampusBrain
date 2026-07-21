@@ -37,6 +37,14 @@ M1–M21 are done, in original numeric order. For everything after that, we're n
 
 At the end of the Core Path: a Faculty/Admin user can log in, upload a document, and a Student can log in, ask a question, and get a cited answer — through a browser, no API tooling required.
 
+### Decisions made after measurement (2026-07-21)
+
+**M33–M34 (BM25 + hybrid fusion): BUILT.** Measured on the real 47-chunk Sitare corpus, hybrid is more robust than either source alone — keyword wins exact-identifier queries ("CS 111" → rank 1 vs semantic's 2), semantic wins conceptual ones ("new campus" → rank 1 vs keyword's 3). Two non-obvious bugs found and fixed while building it: `plainto_tsquery` ANDs all terms (so natural-language questions matched nothing), and the no-evidence guardrail's 0.35 threshold is calibrated for cosine similarity while RRF scores are ~0.03 (a naive swap would have made the system refuse every question).
+
+**M35–M36 (reranking): DROPPED, not deferred.** With hybrid, the correct chunk landed in the top 2 for every test query, and RAG passes all top-5 chunks to the LLM regardless — so rank 1 vs rank 2 does not change the generated answer. The BGE reranker would add ~2GB (`torch`/`sentence-transformers`) to both the backend and worker images, the exact weight avoided for embeddings by serving BGE-M3 through Ollama. Revisit only if: `top_k` is cut to 1–2 to save tokens, a search-results UI makes rank-1 user-visible, or corpus growth pushes answers out of the top-5.
+
+**Known performance ceiling (not yet addressed):** ingestion embeds chunks one-at-a-time over HTTP (35KB → 47 chunks → 248s). Deliberate in M28 for per-chunk failure isolation. Batch embedding via Ollama is the fix when document volume makes this hurt.
+
 ### Deferred (after Core Path is proven working)
 
 - **Retrieval quality**: BM25 keyword search (M33), hybrid fusion (M34), reranking (M35–M36)
