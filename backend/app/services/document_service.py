@@ -1,3 +1,5 @@
+import os
+import re
 import uuid
 
 import magic
@@ -48,7 +50,13 @@ def upload_document(
         if collection is None:
             raise DocumentValidationError("Collection not found in this organization")
 
-    storage_key = f"{org_id}/{uuid.uuid4()}_{filename}"
+    # Never build the storage key from the client-supplied filename directly —
+    # it's attacker-controlled and could contain "/" or ".." sequences. Keep
+    # only a sanitized extension; the real filename lives solely in the DB
+    # `filename` column, used for display, never for addressing storage.
+    _, ext = os.path.splitext(filename)
+    safe_ext = re.sub(r"[^A-Za-z0-9.]", "", ext)[:10]
+    storage_key = f"{org_id}/{uuid.uuid4()}{safe_ext}"
     storage.put_object(storage_key, content, content_type=mime_type)
 
     document = Document(
