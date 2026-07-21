@@ -1,6 +1,8 @@
 from io import BytesIO
 
+# pyrefly: ignore [missing-import]
 from minio import Minio
+# pyrefly: ignore [missing-import]
 from minio.error import S3Error
 
 from app.core.config import settings

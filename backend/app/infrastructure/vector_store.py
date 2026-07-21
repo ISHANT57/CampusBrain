@@ -1,4 +1,6 @@
+# pyrefly: ignore [missing-import]
 from qdrant_client import QdrantClient
+# pyrefly: ignore [missing-import]
 from qdrant_client.models import Distance, VectorParams
 
 from app.core.config import settings
