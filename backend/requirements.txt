@@ -17,3 +17,4 @@ Pillow==10.4.0
 unstructured[docx,pptx,xlsx,csv,md]==0.15.13
 paddlepaddle==2.6.2
 paddleocr==2.8.1
+langchain-text-splitters==0.3.0
