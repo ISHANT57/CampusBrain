@@ -15,6 +15,40 @@ docker/
 
 ---
 
+## Execution Order — Reprioritized 2026-07-21
+
+M1–M21 are done, in original numeric order. For everything after that, we're no longer building strictly in numeric order — the milestones below are unchanged in content/DoD (still the reference for what each one means and how to verify it), but **execution follows the Core Path first**, so a usable, demoable product exists as early as possible. The Deferred list is not cancelled — it's picked up once the Core Path is proven working end to end.
+
+**Why this split:** the original numeric order interleaves quality/robustness work (reranking, hybrid search, streaming, admin panels) between the milestones that make the product *functional at all*. Reordering doesn't change what gets built — only when — so nothing here is being cut, only sequenced differently.
+
+### Core Path (build now, in this order)
+
+1. M22–M23 — OCR fallback + cleaning (in progress)
+2. M24–M25 — Chunking (recursive splitter + persistence). **M26 (chunk-size tuning notebook) skipped for now** — using a sensible default, revisit if retrieval quality looks poor.
+3. M27–M28 — Embeddings (BGE-M3 + batch pipeline step)
+4. M29–M31 — Vector DB (Qdrant collections, upsert, full ingestion pipeline wired end to end)
+5. M32 — Retrieval: **semantic search only**. BM25 (M33) and hybrid fusion (M34) deferred.
+6. **M35–M36 (reranking) skipped entirely for now** — real quality improvement, not required for the pipeline to produce a correct cited answer.
+7. M37–M39 — LLM integration: provider wrapper, citation-forcing prompt, no-evidence guardrail. M40 (prompt-injection sanitization) done in a basic form, not the full hardening pass.
+8. M41 — Complete RAG pipeline (`/ask` end to end). **M42 (formal latency instrumentation) deferred** — basic logging only for now. M43 (schema freeze) still done, since the frontend needs a stable contract.
+9. **M48 — Rate limiting**, moved up from its original position: once `/ask` is reachable over the network, unmetered LLM/embedding calls are a real cost risk, not just a pre-launch nicety.
+10. M44–M45 — Chat: durable conversation history (Postgres) + multi-turn context. Responses stay **non-streaming** for now (M46 deferred).
+11. M51–M53 — Frontend: auth pages, upload UI, chat UI. This is the milestone that makes the product usable by a person, not just curl.
+
+At the end of the Core Path: a Faculty/Admin user can log in, upload a document, and a Student can log in, ask a question, and get a cited answer — through a browser, no API tooling required.
+
+### Deferred (after Core Path is proven working)
+
+- **Retrieval quality**: BM25 keyword search (M33), hybrid fusion (M34), reranking (M35–M36)
+- **Chat polish**: SSE streaming (M46), related-questions (M47)
+- **Hardening**: malware scanning (M49), unified error model (M50) — rate limiting (M48) already promoted to Core
+- **Admin surfaces**: Admin panel (M54), Super Admin panel (M55), Analytics (M56–M57)
+- **Quality measurement**: RAGAS + Langfuse evaluation (M58–M59)
+- **Production readiness**: prod Docker Compose, Nginx/HTTPS, CI/CD, backups (M60–M64)
+- **Latency instrumentation** (M42), full prompt-injection hardening beyond M40's basic pass
+
+---
+
 ## PHASE 1 — Foundation & Infrastructure
 
 ### M1 — Repo & tooling bootstrap
