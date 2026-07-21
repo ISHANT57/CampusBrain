@@ -22,7 +22,9 @@ ORG_ID = 1
 
 
 def _unique_email(prefix: str) -> str:
-    return f"{prefix}-{uuid.uuid4().hex[:8]}@test.local"
+    # Not .local/.test/.example — email-validator rejects reserved special-use
+    # domains, so tests need a normal-looking one.
+    return f"{prefix}-{uuid.uuid4().hex[:8]}@sitare.ac.in"
 
 
 def _make_user(role: UserRole) -> tuple[User, str]:
