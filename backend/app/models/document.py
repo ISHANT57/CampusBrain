@@ -22,7 +22,11 @@ class Document(Base):
     filename = Column(String, nullable=False)
     mime_type = Column(String, nullable=False)
     size_bytes = Column(BigInteger, nullable=False)
-    status = Column(Enum(DocumentStatus, name="document_status"), nullable=False, default=DocumentStatus.PENDING)
+    status = Column(
+        Enum(DocumentStatus, name="document_status", values_callable=lambda enum_cls: [e.value for e in enum_cls]),
+        nullable=False,
+        default=DocumentStatus.PENDING,
+    )
     # Populated once upload/storage is wired in (Phase 4) — not used yet.
     storage_key = Column(String, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)

@@ -23,5 +23,8 @@ class User(Base):
     org_id = Column(Integer, ForeignKey("organizations.id"), nullable=False, index=True)
     email = Column(String, nullable=False)
     hashed_password = Column(String, nullable=False)
-    role = Column(Enum(UserRole, name="user_role"), nullable=False)
+    role = Column(
+        Enum(UserRole, name="user_role", values_callable=lambda enum_cls: [e.value for e in enum_cls]),
+        nullable=False,
+    )
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
