@@ -1,3 +1,5 @@
+import re
+
 from sqlalchemy import text as sql_text
 from sqlalchemy.orm import Session
 
@@ -34,22 +36,38 @@ def semantic_search(org_id: int, query: str, top_k: int = 5) -> list[dict]:
     ]
 
 
+def _to_or_tsquery(query: str) -> str:
+    """Build an OR tsquery from free text.
+
+    plainto_tsquery ANDs every term, so a natural-language question
+    ("what programming languages are taught in year 1?") matches nothing
+    unless a chunk contains all of those words. OR-ing the terms and letting
+    ts_rank order the results is what actually gives BM25-like behaviour.
+    """
+    terms = [t for t in re.split(r"\W+", query) if t]
+    return " | ".join(terms)
+
+
 def keyword_search(db: Session, org_id: int, query: str, top_k: int = 5) -> list[dict]:
     """Postgres full-text search. Catches exact terms (course codes, acronyms,
     proper nouns) that embeddings blur together."""
+    tsquery = _to_or_tsquery(query)
+    if not tsquery:
+        return []
+
     rows = db.execute(
         sql_text(
             """
             SELECT id, document_id, page_number, text,
-                   ts_rank(search_vector, plainto_tsquery('english', :q)) AS rank
+                   ts_rank(search_vector, to_tsquery('english', :q)) AS rank
             FROM chunks
             WHERE org_id = :org_id
-              AND search_vector @@ plainto_tsquery('english', :q)
+              AND search_vector @@ to_tsquery('english', :q)
             ORDER BY rank DESC
             LIMIT :top_k
             """
         ),
-        {"q": query, "org_id": org_id, "top_k": top_k},
+        {"q": tsquery, "org_id": org_id, "top_k": top_k},
     ).mappings().all()
 
     return [
