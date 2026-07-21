@@ -16,4 +16,6 @@ class DocumentRead(BaseModel):
     size_bytes: int
     status: DocumentStatus
     storage_key: str | None
+    page_count: int | None
+    extraction_method: str | None
     created_at: datetime

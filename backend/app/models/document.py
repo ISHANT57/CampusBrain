@@ -31,4 +31,9 @@ class Document(Base):
     )
     # Populated once upload/storage is wired in (Phase 4) — not used yet.
     storage_key = Column(String, nullable=True)
+    # Populated once real extraction runs (M23). Language detection deliberately
+    # skipped for now — no downstream consumer yet, would add a dependency for
+    # a field nothing uses.
+    page_count = Column(Integer, nullable=True)
+    extraction_method = Column(String, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)

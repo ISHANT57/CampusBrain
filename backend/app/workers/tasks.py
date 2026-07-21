@@ -1,13 +1,19 @@
-import asyncio
-
 from app.core.database import SessionLocal
+from app.infrastructure import storage
 from app.models.document import Document, DocumentStatus
+from app.services.extraction.cleaner import clean_text
+from app.services.extraction.router import extract
+
+
+def _infer_extraction_method(mime_type: str) -> str:
+    if mime_type == "application/pdf":
+        return "pdf"  # per-page may mix real text and OCR fallback
+    if mime_type in {"image/png", "image/jpeg"}:
+        return "ocr"
+    return "unstructured"
 
 
 async def process_document(_ctx, document_id: int) -> None:
-    """Stub: real extraction/chunking/embedding land in Phases 5-8. For now
-    this only proves pending -> processing -> processed happens automatically
-    after upload, with zero manual steps."""
     db = SessionLocal()
     try:
         document = db.get(Document, document_id)
@@ -17,9 +23,20 @@ async def process_document(_ctx, document_id: int) -> None:
         document.status = DocumentStatus.PROCESSING
         db.commit()
 
-        await asyncio.sleep(2)  # stand-in for real extraction/chunking/embedding
+        try:
+            content = storage.get_object(document.storage_key)
+            pages = extract(document.mime_type, content)
+            cleaned_pages = [clean_text(page["text"]) for page in pages]
 
-        document.status = DocumentStatus.PROCESSED
-        db.commit()
+            document.page_count = len(cleaned_pages)
+            document.extraction_method = _infer_extraction_method(document.mime_type)
+            document.status = DocumentStatus.PROCESSED
+            db.commit()
+        except Exception as e:
+            # Never let an extraction failure crash the worker process itself —
+            # isolate it to this document and record it as failed.
+            document.status = DocumentStatus.FAILED
+            db.commit()
+            print(f"[process_document] document {document_id} failed: {e}")
     finally:
         db.close()
