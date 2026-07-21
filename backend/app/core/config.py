@@ -31,6 +31,11 @@ class Settings(BaseSettings):
     qdrant_host: str = "qdrant"
     qdrant_internal_port: int = 6333
 
+    openrouter_api_key: str = ""
+    # Change LLM_MODEL in .env to try other OpenRouter models. Default is a
+    # free-tier model to avoid unexpected cost.
+    llm_model: str = "meta-llama/llama-3.3-70b-instruct:free"
+
     @property
     def ollama_url(self) -> str:
         return f"http://{self.ollama_host}:{self.ollama_internal_port}"
