@@ -16,6 +16,7 @@ export function CommandPalette({
   dark,
   conversations,
   onOpenChat,
+  container,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -25,6 +26,10 @@ export function CommandPalette({
   dark: boolean
   conversations: Conversation[]
   onOpenChat: (id: string) => void
+  // The .cb-scope element. Without it this portals to document.body, where
+  // none of the theme's CSS variables are defined, and the palette renders
+  // with a transparent background over the conversation.
+  container?: HTMLElement | null
 }) {
   const run = (fn: () => void) => () => {
     onOpenChange(false)
@@ -37,6 +42,7 @@ export function CommandPalette({
       onOpenChange={onOpenChange}
       label="Command palette"
       shouldFilter
+      container={container ?? undefined}
       overlayClassName="fixed inset-0 z-50 bg-ink/40 backdrop-blur-[2px]"
       contentClassName="fixed left-1/2 top-[15vh] z-50 w-[min(560px,calc(100vw-2rem))] -translate-x-1/2 animate-rise overflow-hidden rounded-[16px] border border-border bg-surface shadow-[var(--shadow-card)]"
     >

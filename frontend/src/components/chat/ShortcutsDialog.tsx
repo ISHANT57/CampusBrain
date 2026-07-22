@@ -26,10 +26,19 @@ const GROUPS: [string, [string, string[]][]][] = [
   ],
 ]
 
-export function ShortcutsDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
+export function ShortcutsDialog({
+  open,
+  onOpenChange,
+  container,
+}: {
+  open: boolean
+  onOpenChange: (v: boolean) => void
+  // See CommandPalette — portalling outside .cb-scope loses every theme token.
+  container?: HTMLElement | null
+}) {
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
-      <Dialog.Portal>
+      <Dialog.Portal container={container ?? undefined}>
         <Dialog.Overlay className="fixed inset-0 z-50 bg-ink/40 backdrop-blur-[2px]" />
         <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-[min(440px,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 animate-rise rounded-[16px] border border-border bg-surface p-6 shadow-[var(--shadow-card)]">
           <div className="flex items-start justify-between gap-4">

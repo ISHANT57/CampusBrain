@@ -27,6 +27,21 @@ export default function Chat() {
   const [pinned, setPinned] = useState(true)
   const composer = useRef<ComposerHandle>(null)
   const scroller = useRef<HTMLDivElement>(null)
+  // Radix/cmdk portal their dialogs to document.body by default — which is
+  // OUTSIDE .cb-scope, where every --surface/--ink/--border token is defined.
+  // Portaled content therefore rendered with those variables undefined, i.e.
+  // a fully transparent command palette. Portalling into this element instead
+  // keeps them inside the scope. Can't fix by hoisting the tokens to :root:
+  // --accent/--border/--muted collide with the names index.css already uses
+  // for the auth/upload pages, so that would restyle those.
+  const scope = useRef<HTMLDivElement>(null)
+  // Portal targets are read during render but the ref is only populated after
+  // the first commit, so the first render would hand the dialogs null (which
+  // silently falls back to document.body — the bug this is fixing). One extra
+  // render after mount gives them the real element.
+  const [scopeReady, setScopeReady] = useState(false)
+  useEffect(() => setScopeReady(true), [])
+  const portalTarget = scopeReady ? scope.current : null
 
   useEffect(() => setSidebarOpen(desktop), [desktop])
 
@@ -99,8 +114,9 @@ export default function Chat() {
   }
 
   return (
-    <div className={cn('cb-scope flex min-h-0 flex-1', dark && 'dark')}>
+    <div ref={scope} className={cn('cb-scope flex min-h-0 flex-1', dark && 'dark')}>
       <Sidebar
+        container={portalTarget}
         open={sidebarOpen}
         onOpenChange={setSidebarOpen}
         conversations={chat.conversations}
@@ -175,6 +191,7 @@ export default function Chat() {
       </div>
 
       <CommandPalette
+        container={portalTarget}
         open={paletteOpen}
         onOpenChange={setPaletteOpen}
         onNew={newChat}
@@ -187,7 +204,11 @@ export default function Chat() {
           if (!desktop) setSidebarOpen(false)
         }}
       />
-      <ShortcutsDialog open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
+      <ShortcutsDialog
+        container={portalTarget}
+        open={shortcutsOpen}
+        onOpenChange={setShortcutsOpen}
+      />
     </div>
   )
 }

@@ -127,10 +127,14 @@ function SidebarContent({
 export function Sidebar({
   open,
   onOpenChange,
+  container,
   ...props
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
+  // See CommandPalette — the mobile drawer is portalled, so it needs the
+  // scope element or it renders unthemed.
+  container?: HTMLElement | null
 } & Omit<Parameters<typeof SidebarContent>[0], 'onClose'>) {
   const desktop = useMediaQuery('(min-width: 900px)')
 
@@ -153,7 +157,7 @@ export function Sidebar({
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <AnimatePresence>
         {open && (
-          <Dialog.Portal forceMount>
+          <Dialog.Portal forceMount container={container ?? undefined}>
             <Dialog.Overlay asChild>
               <motion.div
                 initial={{ opacity: 0 }}
