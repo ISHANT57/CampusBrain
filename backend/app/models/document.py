@@ -31,6 +31,11 @@ class Document(Base):
     )
     # Populated once upload/storage is wired in (Phase 4) — not used yet.
     storage_key = Column(String, nullable=True)
+    # sha256 of the raw bytes. Set only by tools/ingest.py, which uses it to
+    # skip files it has already indexed; API uploads leave it NULL (they have
+    # no re-run semantics to dedup against). Not exposed in DocumentRead —
+    # deliberately internal, so the API response shape is unchanged.
+    content_hash = Column(String(64), nullable=True, index=True)
     # Populated once real extraction runs (M23). Language detection deliberately
     # skipped for now — no downstream consumer yet, would add a dependency for
     # a field nothing uses.
