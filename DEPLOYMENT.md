@@ -31,7 +31,7 @@ infrastructure is the only option.
 |---|---|
 | Root Directory | `backend` |
 | Runtime | Docker (uses `backend/Dockerfile`) |
-| Start Command | `uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 4` |
+| Docker Command *(Settings → Advanced, NOT "Start Command" — that field is for native-runtime services and does nothing for a Docker-runtime one)* | `uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 4` |
 | Pre-Deploy Command | `alembic upgrade head` |
 
 Two things that aren't optional:
@@ -39,8 +39,11 @@ Two things that aren't optional:
 - **`$PORT`, not a hardcoded `8000`.** Render assigns a port via the `PORT`
   env var and expects the service to bind to it — the Dockerfile's own `CMD`
   hardcodes `--port 8000` and ends in `--reload` (correct for local dev, wrong
-  for both reasons in production), which is why the Start Command above
-  overrides it rather than relying on the image default.
+  for both reasons in production), which is why the Docker Command above
+  overrides it rather than relying on the image default. If you leave this
+  field blank, Render silently runs the Dockerfile's dev `CMD` instead — it
+  won't error, it'll just quietly serve the wrong thing, exactly as happened
+  on the first deploy.
 - **Pre-Deploy Command runs `alembic upgrade head` before each deploy** —
   Render's mechanism for exactly this (not a cron job, not manual). Without
   it, a deploy with a new migration serves against a stale schema.
