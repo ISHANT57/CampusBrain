@@ -1,5 +1,5 @@
 import { forwardRef, useImperativeHandle, useLayoutEffect, useRef, useState } from 'react'
-import { ArrowUp, Square } from 'lucide-react'
+import { ArrowUp, Paperclip, Square } from 'lucide-react'
 import { Button } from './ui/button'
 import { Kbd, Tooltip } from './ui/primitives'
 import { cn, mod } from './lib/utils'
@@ -64,6 +64,15 @@ export const Composer = forwardRef<
       />
 
       <div className="flex items-center gap-2 px-3 pb-3 pt-2">
+        <Tooltip label="Uploading is done from the Upload page">
+          <span
+            aria-hidden="true"
+            className="flex size-8 items-center justify-center rounded-[8px] text-faint"
+          >
+            <Paperclip className="size-4" />
+          </span>
+        </Tooltip>
+
         <p className="hidden items-center gap-1.5 text-[11px] text-faint sm:flex">
           <Kbd>Enter</Kbd> to send
           <span className="text-border-strong">·</span>

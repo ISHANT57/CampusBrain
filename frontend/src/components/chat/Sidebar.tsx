@@ -5,6 +5,7 @@ import { MessageSquarePlus, PanelLeftClose, Search, Trash2, X } from 'lucide-rea
 import { Button } from './ui/button'
 import { Kbd, Tooltip } from './ui/primitives'
 import { cn, mod, useMediaQuery } from './lib/utils'
+import { Logo } from './Logo'
 import type { Conversation } from './types'
 
 const DAY = 86_400_000
@@ -46,7 +47,7 @@ function SidebarContent({
   return (
     <div className="flex h-full flex-col bg-sunken">
       <div className="flex items-center gap-2 px-3 py-3">
-        <span className="eyebrow px-1">History</span>
+        <Logo className="ml-1" />
         <div className="ml-auto flex items-center gap-1">
           <Tooltip label={isOverlay ? 'Close' : <>Hide sidebar <Kbd>{mod} B</Kbd></>}>
             <Button variant="ghost" size="icon-sm" onClick={onClose} aria-label="Hide sidebar">
@@ -60,6 +61,7 @@ function SidebarContent({
         <Button variant="outline" size="md" onClick={onNew} className="w-full justify-start">
           <MessageSquarePlus className="text-muted" />
           New conversation
+          <Kbd className="ml-auto">{mod} ⇧ O</Kbd>
         </Button>
       </div>
 
