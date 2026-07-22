@@ -1,0 +1,186 @@
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { api } from '../../api/client'
+import type { ChatMessage, Conversation } from './types'
+
+const STORE = 'cb-chat-conversations'
+const uid = () => Math.random().toString(36).slice(2, 10)
+const titleFrom = (text: string) => (text.length > 46 ? text.slice(0, 46).trimEnd() + '…' : text)
+
+// Local-only history: the backend has no "list my conversations" endpoint
+// yet (only chat-by-conversation_id), so the sidebar is per-browser via
+// localStorage. Swap for a real fetch once that endpoint exists.
+function load(): Conversation[] {
+  try {
+    const raw = JSON.parse(localStorage.getItem(STORE) || 'null')
+    if (!Array.isArray(raw)) return []
+    // A message can be persisted mid-flight (refresh, crash, dropped
+    // connection) and never finish — resurrect it as "stopped", not a
+    // permanent phantom spinner that also blocks all new sends.
+    return raw.map((c: Conversation) => ({
+      ...c,
+      messages: c.messages.map((m: ChatMessage) =>
+        m.phase === 'searching' || m.phase === 'revealing' ? { ...m, phase: 'stopped' as const } : m,
+      ),
+    }))
+  } catch {
+    return []
+  }
+}
+
+export function useChat() {
+  const [conversations, setConversations] = useState<Conversation[]>(load)
+  const [activeLocalId, setActiveLocalId] = useState<string | null>(() => load()[0]?.localId ?? null)
+  const timers = useRef<Array<ReturnType<typeof setTimeout>>>([])
+
+  useEffect(() => {
+    localStorage.setItem(STORE, JSON.stringify(conversations.slice(0, 50)))
+  }, [conversations])
+
+  const active = conversations.find((c) => c.localId === activeLocalId) ?? null
+  const messages = active?.messages ?? []
+  const streaming = messages.some((m) => m.phase === 'searching' || m.phase === 'revealing')
+
+  // Never overwrite a message the user has already stopped — this is the
+  // one guard every caller (the async response, the reveal ticker) routes
+  // through, so a late-arriving response can't resurrect a stopped bubble.
+  const patch = useCallback((localId: string, msgId: string, next: Partial<ChatMessage>) => {
+    setConversations((cs) =>
+      cs.map((c) =>
+        c.localId !== localId
+          ? c
+          : {
+              ...c,
+              messages: c.messages.map((m) =>
+                m.id === msgId && m.phase !== 'stopped' ? { ...m, ...next } : m,
+              ),
+            },
+      ),
+    )
+  }, [])
+
+  const clearTimers = () => {
+    timers.current.forEach((t) => (clearTimeout(t), clearInterval(t)))
+    timers.current = []
+  }
+
+  const stop = useCallback(() => {
+    clearTimers()
+    setConversations((cs) =>
+      cs.map((c) => ({
+        ...c,
+        messages: c.messages.map((m) =>
+          m.phase === 'searching' || m.phase === 'revealing' ? { ...m, phase: 'stopped' } : m,
+        ),
+      })),
+    )
+  }, [])
+
+  // The backend returns one complete JSON answer, not a token stream. This
+  // reveals the already-fetched text at a reading cadence for polish — it
+  // is not simulating a real stream. Citations are attached up front (the
+  // response already has them) so the source rail appears with the first
+  // token, the same order Perplexity-style UIs use.
+  const reveal = useCallback(
+    (localId: string, msgId: string, text: string) => {
+      const words = text.split(/(\s+)/)
+      let i = 0
+      const iv = setInterval(() => {
+        const step = 2 + (i % 3)
+        const chunk = words.slice(i, i + step).join('')
+        i += step
+        setConversations((cs) =>
+          cs.map((c) =>
+            c.localId !== localId
+              ? c
+              : {
+                  ...c,
+                  messages: c.messages.map((m) =>
+                    m.id === msgId && m.phase === 'revealing' ? { ...m, content: m.content + chunk } : m,
+                  ),
+                },
+          ),
+        )
+        if (i >= words.length) {
+          clearInterval(iv)
+          patch(localId, msgId, { phase: 'done' })
+        }
+      }, 18)
+      timers.current.push(iv)
+    },
+    [patch],
+  )
+
+  const send = useCallback(
+    async (text: string) => {
+      const q = text.trim()
+      if (!q) return
+      clearTimers()
+
+      const replyId = uid()
+      const userMsg: ChatMessage = { id: uid(), role: 'user', content: q }
+      const replyMsg: ChatMessage = { id: replyId, role: 'assistant', content: '', phase: 'searching' }
+
+      const localId = activeLocalId ?? uid()
+      const backendConvId = active?.conversationId ?? null
+
+      setConversations((cs) => {
+        const existing = cs.find((c) => c.localId === localId)
+        if (existing) {
+          return cs.map((c) =>
+            c.localId === localId ? { ...c, messages: [...c.messages, userMsg, replyMsg] } : c,
+          )
+        }
+        return [
+          { localId, conversationId: null, title: titleFrom(q), createdAt: Date.now(), messages: [userMsg, replyMsg] },
+          ...cs,
+        ]
+      })
+      if (!activeLocalId) setActiveLocalId(localId)
+
+      try {
+        const res = await api.chat(q, backendConvId)
+        setConversations((cs) =>
+          cs.map((c) => (c.localId === localId ? { ...c, conversationId: res.conversation_id } : c)),
+        )
+        patch(localId, replyId, { phase: 'revealing', citations: res.citations ?? [] })
+        reveal(localId, replyId, res.answer)
+      } catch (err) {
+        patch(localId, replyId, { phase: 'error', content: (err as Error).message })
+      }
+    },
+    [activeLocalId, active, patch, reveal],
+  )
+
+  const newChat = useCallback(() => {
+    clearTimers()
+    setActiveLocalId(null)
+  }, [])
+
+  const openChat = useCallback((localId: string) => {
+    clearTimers()
+    setActiveLocalId(localId)
+  }, [])
+
+  const removeChat = useCallback(
+    (localId: string) => {
+      setConversations((cs) => cs.filter((c) => c.localId !== localId))
+      setActiveLocalId((id) => (id === localId ? null : id))
+    },
+    [],
+  )
+
+  useEffect(() => clearTimers, [])
+
+  return {
+    conversations,
+    active,
+    activeLocalId,
+    messages,
+    streaming,
+    send,
+    stop,
+    newChat,
+    openChat,
+    removeChat,
+  }
+}
