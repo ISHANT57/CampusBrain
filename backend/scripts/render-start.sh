@@ -8,4 +8,11 @@
 set -e
 
 alembic upgrade head
-exec uvicorn app.main:app --host 0.0.0.0 --port "${PORT:-8000}" --workers 4
+# Single worker, deliberately: Render free tier is 512Mi RAM total, and this
+# app imports paddlepaddle/paddleocr, which are heavy enough that 4 workers
+# (4 full copies of the process) OOM-killed a real deploy. Render itself
+# suggests 1 ("Setting WEB_CONCURRENCY=1... based on available CPUs") for an
+# instance this size — the previous --workers 4 here overrode that. This also
+# happens to be required for core/rate_limit.py's in-memory limiter, which
+# only counts correctly with exactly one process.
+exec uvicorn app.main:app --host 0.0.0.0 --port "${PORT:-8000}" --workers 1
