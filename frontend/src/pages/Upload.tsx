@@ -1,13 +1,28 @@
-import { useRef, useState } from "react";
+import { useRef, useState, type DragEvent, type KeyboardEvent } from "react";
+import { CheckCircle2, Loader2, UploadCloud, XCircle } from "lucide-react";
 
 import { api } from "../api/client";
+import { Badge } from "../components/chat/ui/primitives";
+import { cn } from "../components/chat/lib/utils";
 
-type Item = { name: string; status: string; error?: string };
+type Status = "uploading" | "pending" | "processing" | "processed" | "failed";
+type Item = { name: string; status: Status; error?: string };
 
 const TERMINAL = ["processed", "failed"];
 
+// Literal Tailwind classes, not built from a template string — Tailwind's
+// scanner needs to see the exact class name in source to generate it.
+const STATUS_META: Record<Status, { label: string; icon: typeof CheckCircle2; badge: string; icon_color: string; spin?: boolean }> = {
+  uploading: { label: "Uploading", icon: Loader2, badge: "warning", icon_color: "text-warning", spin: true },
+  pending: { label: "Pending", icon: Loader2, badge: "warning", icon_color: "text-warning", spin: true },
+  processing: { label: "Processing", icon: Loader2, badge: "warning", icon_color: "text-warning", spin: true },
+  processed: { label: "Processed", icon: CheckCircle2, badge: "success", icon_color: "text-success" },
+  failed: { label: "Failed", icon: XCircle, badge: "error", icon_color: "text-error" },
+};
+
 export default function Upload() {
   const [items, setItems] = useState<Item[]>([]);
+  const [dragActive, setDragActive] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const update = (name: string, patch: Partial<Item>) =>
@@ -39,51 +54,86 @@ export default function Upload() {
     }
   };
 
+  const openPicker = () => inputRef.current?.click();
+  const onDropzoneKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      openPicker();
+    }
+  };
+  const onDrop = (e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setDragActive(false);
+    if (e.dataTransfer.files.length) handleFiles(e.dataTransfer.files);
+  };
+
   return (
-    <div className="page">
-      <h2>Upload documents</h2>
-      <p className="muted">
-        PDF, Word (.doc/.docx), PowerPoint (.ppt/.pptx), Excel (.xls/.xlsx), CSV, Markdown, TXT,
-        JSON, HTML or XML. Max 100 MB.
-      </p>
+    <div className="mx-auto max-w-[760px] px-6 py-10">
+      <div className="mb-6">
+        <p className="eyebrow">Knowledge base</p>
+        <h1 className="mt-1.5 text-[22px] font-medium tracking-[-0.01em] text-ink">Upload documents</h1>
+        <p className="mt-1.5 max-w-[540px] text-[13.5px] leading-[1.55] text-muted">
+          PDF, Word (.doc/.docx), PowerPoint (.ppt/.pptx), Excel (.xls/.xlsx), CSV, Markdown, TXT,
+          JSON, HTML or XML. Max 100 MB per file.
+        </p>
+      </div>
 
       <div
-        className="dropzone"
-        onClick={() => inputRef.current?.click()}
-        onDragOver={(e) => e.preventDefault()}
-        onDrop={(e) => {
+        onClick={openPicker}
+        onKeyDown={onDropzoneKeyDown}
+        onDragOver={(e) => {
           e.preventDefault();
-          if (e.dataTransfer.files) handleFiles(e.dataTransfer.files);
+          setDragActive(true);
         }}
+        onDragLeave={() => setDragActive(false)}
+        onDrop={onDrop}
+        role="button"
+        tabIndex={0}
+        aria-label="Upload documents — drop files here or press Enter to choose"
+        className={cn(
+          "flex cursor-pointer flex-col items-center gap-3 rounded-[16px] border-2 border-dashed px-6 py-14 text-center transition-colors duration-150",
+          dragActive
+            ? "border-accent bg-accent-soft"
+            : "border-border bg-sunken hover:border-border-strong hover:bg-surface",
+        )}
       >
-        Drop files here, or click to choose
+        <span className="flex size-11 items-center justify-center rounded-full bg-surface text-accent shadow-[var(--shadow-card)]">
+          <UploadCloud className="size-5" />
+        </span>
+        <p className="text-[14px] font-medium text-ink">
+          {dragActive ? "Drop to upload" : "Drop files here, or click to choose"}
+        </p>
+        <p className="text-[12.5px] text-faint">Multiple files supported</p>
         <input
           ref={inputRef}
           type="file"
           multiple
           hidden
-          // Mirrors backend/app/core/upload_policy.py's SUPPORTED_TYPES keys —
-          // a browser-level hint only, not real validation (the backend
-          // re-checks the actual file bytes regardless; this list is a
-          // second source of truth to keep in sync manually, not shared code,
-          // since the frontend can't import a Python module).
+          tabIndex={-1}
           accept=".pdf,.txt,.md,.csv,.xlsx,.xls,.docx,.doc,.pptx,.ppt,.json,.html,.xml"
           onChange={(e) => e.target.files && handleFiles(e.target.files)}
         />
       </div>
 
       {items.length > 0 && (
-        <table className="uploads">
-          <tbody>
-            {items.map((i) => (
-              <tr key={i.name}>
-                <td>{i.name}</td>
-                <td className={`status ${i.status}`}>{i.status}</td>
-                <td className="error">{i.error ?? ""}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <ul className="mt-6 flex flex-col gap-2">
+          {items.map((i) => {
+            const meta = STATUS_META[i.status];
+            return (
+              <li key={i.name} className="rounded-[12px] border border-border bg-surface px-4 py-3">
+                <div className="flex items-center gap-3">
+                  <meta.icon
+                    className={cn("size-4 shrink-0", meta.icon_color, meta.spin && "animate-spin")}
+                    aria-hidden="true"
+                  />
+                  <span className="min-w-0 flex-1 truncate text-[13.5px] text-ink">{i.name}</span>
+                  <Badge variant={meta.badge as "success" | "warning" | "error"}>{meta.label}</Badge>
+                </div>
+                {i.error && <p className="mt-2 pl-7 text-[12.5px] leading-[1.5] text-error">{i.error}</p>}
+              </li>
+            );
+          })}
+        </ul>
       )}
     </div>
   );

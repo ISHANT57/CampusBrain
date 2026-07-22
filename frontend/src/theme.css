@@ -1,7 +1,13 @@
-/* Scoped to the Chat page only. Deliberately import theme+utilities WITHOUT
-   Preflight (Tailwind's reset) — Preflight strips default button/input
-   styling globally and would break Login/Register/Upload's plain CSS.
-   Tokens live under .cb-scope (not :root) so nothing leaks app-wide. */
+/* App-wide design system. Originally scoped to the Chat page only, back when
+   admin pages had their own separate hardcoded-hex CSS (index.css) — that
+   system is gone, so this now covers the whole app.
+
+   Deliberately import theme+utilities WITHOUT Preflight (Tailwind's reset) —
+   Preflight strips default button/input styling globally, and every control
+   here is styled explicitly anyway. Tokens live under .cb-scope (not :root),
+   not because of a naming collision any more, but because the portal-target
+   trick (see App.tsx) needs one real, findable DOM node that Radix/cmdk
+   dialogs can portal into and still see every CSS variable. */
 @import 'tailwindcss/theme.css';
 @import 'tailwindcss/utilities.css';
 
@@ -22,6 +28,17 @@
   --clay: #d97757;
   --ring: #0d6b6f;
   --shadow-card: 0 1px 2px rgb(26 25 23 / 0.04), 0 8px 24px -12px rgb(26 25 23 / 0.12);
+
+  /* Status tokens. --error aliases --clay rather than introducing a second
+     red — this app's warm terracotta already reads as "error" everywhere
+     it's used (Message's error card, the sidebar's delete-hover), so a
+     generic red would just be a second, competing error color. */
+  --success: #15803d;
+  --success-soft: #e7f5eb;
+  --warning: #b45309;
+  --warning-soft: #fdf1e0;
+  --error: var(--clay);
+  --error-soft: #f8ece5;
 }
 
 .cb-scope.dark {
@@ -39,6 +56,13 @@
   --clay: #e08a6c;
   --ring: #45c4bd;
   --shadow-card: 0 1px 2px rgb(0 0 0 / 0.4), 0 8px 24px -12px rgb(0 0 0 / 0.6);
+
+  --success: #4ade80;
+  --success-soft: #12291c;
+  --warning: #fbbf24;
+  --warning-soft: #332508;
+  --error: var(--clay);
+  --error-soft: #34211a;
 }
 
 @theme inline {
@@ -55,6 +79,13 @@
   --color-accent-soft: var(--accent-soft);
   --color-clay: var(--clay);
   --color-ring: var(--ring);
+
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-error: var(--error);
+  --color-error-soft: var(--error-soft);
 
   --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
   --font-serif: 'Source Serif 4', Charter, Georgia, serif;
@@ -95,13 +126,31 @@
   }
 }
 
-/* Manual reset for the elements Preflight would normally cover — kept
-   inside .cb-scope so it never touches the rest of the app. */
+/* Manual reset for the elements Preflight would normally cover.
+
+   background/color reference the RAW --canvas/--ink vars, not the
+   --color-canvas/--color-ink aliases from @theme inline above. Tailwind's
+   "inline" mode doesn't emit those aliases as real, inheritable runtime
+   custom properties — it only substitutes them inline into generated
+   utility classes (.text-ink becomes `color: var(--ink)` in the actual
+   CSS, never `color: var(--color-ink)`). Using the alias here previously
+   left both properties silently unresolved (background: transparent,
+   color: initial/black) — masked for a long time by index.css's own
+   unrelated `body { background: var(--bg) }`, which painted an opaque
+   dark backdrop behind everything. Once that legacy rule was removed,
+   the page reverted to a plain white background everywhere nothing set
+   an explicit Tailwind bg-* utility. */
 .cb-scope {
-  background: var(--color-canvas);
-  color: var(--color-ink);
+  background: var(--canvas);
+  color: var(--ink);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
+  /* Absolutely-positioned, centered content (the CSS-only Tooltip, mainly)
+     stays invisible at rest but still contributes to scrollable overflow —
+     near a screen edge on mobile that's enough to make the whole page
+     horizontally scrollable. Contained once at the app boundary rather than
+     constraining every tooltip caller individually. */
+  overflow-x: clip;
 }
 .cb-scope *,
 .cb-scope *::before,
@@ -126,14 +175,17 @@
   color: inherit;
   text-decoration: none;
 }
+/* Every var() below this line uses the raw --ink/--muted/--border/etc.
+   variable, never the --color-* alias — see the comment on .cb-scope's own
+   background/color above for why the alias silently resolves to nothing. */
 .cb-scope :focus-visible {
-  outline: 2px solid var(--color-ring);
+  outline: 2px solid var(--ring);
   outline-offset: 2px;
   border-radius: 4px;
 }
 .cb-scope ::selection {
-  background: var(--color-accent-soft);
-  color: var(--color-ink);
+  background: var(--accent-soft);
+  color: var(--ink);
 }
 
 .cb-scope .eyebrow {
@@ -142,7 +194,7 @@
   line-height: 1.5;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--color-muted);
+  color: var(--muted);
 }
 
 .cb-scope .prose-answer {
@@ -158,8 +210,8 @@
 .cb-scope .prose-answer code {
   font-family: var(--font-mono);
   font-size: 0.86em;
-  background: var(--color-sunken);
-  border: 1px solid var(--color-border);
+  background: var(--sunken);
+  border: 1px solid var(--border);
   border-radius: 5px;
   padding: 0.1em 0.35em;
 }
@@ -169,7 +221,7 @@
   font-size: 11px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--color-muted);
+  color: var(--muted);
   padding: 10px 10px 4px;
 }
 

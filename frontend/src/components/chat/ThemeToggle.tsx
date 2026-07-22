@@ -1,22 +1,12 @@
-import { useEffect, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Moon, Sun } from 'lucide-react'
 import { Button } from './ui/button'
 import { Kbd, Tooltip } from './ui/primitives'
 import { mod } from './lib/utils'
 
-const KEY = 'cb-chat-theme'
-
-// Scoped to the Chat page — toggles a class on this page's own wrapper,
-// never <html>/<body>, so it never affects Login/Register/Upload.
-export function useLocalTheme() {
-  const [dark, setDark] = useState(() => localStorage.getItem(KEY) !== 'light')
-  useEffect(() => {
-    localStorage.setItem(KEY, dark ? 'dark' : 'light')
-  }, [dark])
-  return { dark, toggle: () => setDark((d) => !d) }
-}
-
+// The dark/light state itself lives in ../../hooks/useTheme (app-wide, since
+// admin pages now share this same design system) — this component is just
+// the button.
 export function ThemeToggle({ dark, toggle }: { dark: boolean; toggle: () => void }) {
   return (
     <Tooltip

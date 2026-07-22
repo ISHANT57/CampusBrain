@@ -42,7 +42,7 @@ export const Composer = forwardRef<
         e.preventDefault()
         submit()
       }}
-      className="group relative rounded-[20px] border border-border bg-surface shadow-[var(--shadow-card)] transition-[border-color,box-shadow] duration-200 focus-within:border-accent/50 focus-within:shadow-[0_0_0_4px_var(--color-accent-soft)]"
+      className="group relative rounded-[20px] border border-border bg-surface shadow-[var(--shadow-card)] transition-[border-color,box-shadow] duration-200 focus-within:border-accent/50 focus-within:shadow-[0_0_0_4px_var(--accent-soft)]"
     >
       <label htmlFor="cb-composer" className="sr-only">
         Ask a question about your institution's documents
@@ -64,10 +64,12 @@ export const Composer = forwardRef<
       />
 
       <div className="flex items-center gap-2 px-3 pb-3 pt-2">
-        <Tooltip label="Uploading is done from the Upload page">
+        <Tooltip label="Uploading is done from the admin portal">
+          {/* Decorative, not a control — cursor stays default so it doesn't
+              read as clickable next to buttons that are. */}
           <span
             aria-hidden="true"
-            className="flex size-8 items-center justify-center rounded-[8px] text-faint"
+            className="flex size-8 cursor-default items-center justify-center rounded-[8px] text-faint/60"
           >
             <Paperclip className="size-4" />
           </span>

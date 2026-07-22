@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
 import { ArrowDown, PanelLeft, Search } from 'lucide-react'
-import '../components/chat/chat-theme.css'
 import { Button } from '../components/chat/ui/button'
 import { Kbd, Tooltip } from '../components/chat/ui/primitives'
 import { Composer, type ComposerHandle } from '../components/chat/Composer'
@@ -9,15 +8,18 @@ import { EmptyState } from '../components/chat/EmptyState'
 import { Sidebar } from '../components/chat/Sidebar'
 import { CommandPalette } from '../components/chat/CommandPalette'
 import { ShortcutsDialog } from '../components/chat/ShortcutsDialog'
-import { ThemeToggle, useLocalTheme } from '../components/chat/ThemeToggle'
+import { ThemeToggle } from '../components/chat/ThemeToggle'
 import { useChat } from '../components/chat/useChat'
-import { cn, mod, useMediaQuery } from '../components/chat/lib/utils'
+import { mod, useMediaQuery } from '../components/chat/lib/utils'
+import { useTheme } from '../hooks/useTheme'
 
 const isTyping = (el: Element | null) =>
   !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || (el as HTMLElement).isContentEditable)
 
-export default function Chat() {
-  const { dark, toggle: toggleTheme } = useLocalTheme()
+// portalTarget: the app-level .cb-scope element (see App.tsx) — Radix/cmdk
+// dialogs need it to portal into a themed element instead of document.body.
+export default function Chat({ portalTarget }: { portalTarget: HTMLElement | null }) {
+  const { dark, toggle: toggleTheme } = useTheme()
   const chat = useChat()
   const desktop = useMediaQuery('(min-width: 900px)')
 
@@ -27,21 +29,6 @@ export default function Chat() {
   const [pinned, setPinned] = useState(true)
   const composer = useRef<ComposerHandle>(null)
   const scroller = useRef<HTMLDivElement>(null)
-  // Radix/cmdk portal their dialogs to document.body by default — which is
-  // OUTSIDE .cb-scope, where every --surface/--ink/--border token is defined.
-  // Portaled content therefore rendered with those variables undefined, i.e.
-  // a fully transparent command palette. Portalling into this element instead
-  // keeps them inside the scope. Can't fix by hoisting the tokens to :root:
-  // --accent/--border/--muted collide with the names index.css already uses
-  // for the auth/upload pages, so that would restyle those.
-  const scope = useRef<HTMLDivElement>(null)
-  // Portal targets are read during render but the ref is only populated after
-  // the first commit, so the first render would hand the dialogs null (which
-  // silently falls back to document.body — the bug this is fixing). One extra
-  // render after mount gives them the real element.
-  const [scopeReady, setScopeReady] = useState(false)
-  useEffect(() => setScopeReady(true), [])
-  const portalTarget = scopeReady ? scope.current : null
 
   useEffect(() => setSidebarOpen(desktop), [desktop])
 
@@ -114,7 +101,7 @@ export default function Chat() {
   }
 
   return (
-    <div ref={scope} className={cn('cb-scope flex min-h-0 flex-1', dark && 'dark')}>
+    <div className="flex min-h-0 flex-1">
       <Sidebar
         container={portalTarget}
         open={sidebarOpen}

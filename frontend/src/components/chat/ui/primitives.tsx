@@ -1,4 +1,5 @@
 import * as React from 'react'
+import { AlertCircle, AlertTriangle } from 'lucide-react'
 import { cn } from '../lib/utils'
 
 export const Card = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
@@ -13,11 +14,16 @@ export function Badge({
   className,
   variant = 'default',
   ...props
-}: React.HTMLAttributes<HTMLSpanElement> & { variant?: 'default' | 'accent' | 'outline' }) {
+}: React.HTMLAttributes<HTMLSpanElement> & {
+  variant?: 'default' | 'accent' | 'outline' | 'success' | 'warning' | 'error'
+}) {
   const variants = {
     default: 'bg-sunken text-muted border-border',
     accent: 'bg-accent-soft text-accent border-transparent',
     outline: 'bg-transparent text-muted border-border',
+    success: 'bg-success-soft text-success border-transparent',
+    warning: 'bg-warning-soft text-warning border-transparent',
+    error: 'bg-error-soft text-error border-transparent',
   }
   return (
     <span
@@ -79,5 +85,44 @@ export function Tooltip({
         {label}
       </span>
     </span>
+  )
+}
+
+/* Shared premium error/warning state — icon, title, optional description and
+   action, soft-tinted background. One component instead of every screen
+   (login, upload, chat) inventing its own error card. */
+export function Alert({
+  title,
+  description,
+  action,
+  variant = 'error',
+  className,
+}: {
+  title: React.ReactNode
+  description?: React.ReactNode
+  action?: React.ReactNode
+  variant?: 'error' | 'warning'
+  className?: string
+}) {
+  const Icon = variant === 'warning' ? AlertTriangle : AlertCircle
+  return (
+    <div
+      role="alert"
+      className={cn(
+        'flex items-start gap-3 rounded-[12px] border px-4 py-3.5',
+        variant === 'warning' ? 'border-warning/25 bg-warning-soft' : 'border-error/25 bg-error-soft',
+        className,
+      )}
+    >
+      <Icon
+        className={cn('mt-0.5 size-4 shrink-0', variant === 'warning' ? 'text-warning' : 'text-error')}
+        aria-hidden="true"
+      />
+      <div className="min-w-0 flex-1">
+        <p className="text-[13.5px] font-medium leading-[1.4] text-ink">{title}</p>
+        {description && <p className="mt-1 text-[13px] leading-[1.5] text-muted">{description}</p>}
+        {action && <div className="mt-2.5">{action}</div>}
+      </div>
+    </div>
   )
 }

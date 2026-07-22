@@ -1,6 +1,7 @@
 import * as React from 'react'
 import { Slot } from '@radix-ui/react-slot'
 import { cva, type VariantProps } from 'class-variance-authority'
+import { Loader2 } from 'lucide-react'
 import { cn } from '../lib/utils'
 
 const buttonVariants = cva(
@@ -30,12 +31,27 @@ export interface ButtonProps
   extends React.ButtonHTMLAttributes<HTMLButtonElement>,
     VariantProps<typeof buttonVariants> {
   asChild?: boolean
+  loading?: boolean
 }
 
+// asChild is never combined with loading anywhere in this app — Slot needs
+// exactly one child, and a spinner would break that. Not guarded for, since
+// nothing today calls Button asChild with loading=true.
 export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(function Button(
-  { className, variant, size, asChild = false, ...props },
+  { className, variant, size, asChild = false, loading = false, disabled, children, ...props },
   ref,
 ) {
   const Comp = asChild ? Slot : 'button'
-  return <Comp ref={ref} className={cn(buttonVariants({ variant, size, className }))} {...props} />
+  return (
+    <Comp
+      ref={ref}
+      disabled={disabled || loading}
+      aria-busy={loading || undefined}
+      className={cn(buttonVariants({ variant, size, className }))}
+      {...props}
+    >
+      {loading && <Loader2 className="animate-spin" aria-hidden="true" />}
+      {children}
+    </Comp>
+  )
 })

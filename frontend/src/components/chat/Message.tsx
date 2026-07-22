@@ -1,8 +1,8 @@
 import { memo, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { AlertTriangle, Check, ChevronDown, Copy, FileText, RotateCcw, Search } from 'lucide-react'
+import { Check, ChevronDown, Copy, FileText, RotateCcw, Search } from 'lucide-react'
 import { Button } from './ui/button'
-import { Skeleton, Tooltip } from './ui/primitives'
+import { Alert, Skeleton, Tooltip } from './ui/primitives'
 import { cn } from './lib/utils'
 import type { ChatMessage, Citation } from './types'
 
@@ -222,19 +222,15 @@ export const Message = memo(function Message({
 
   if (phase === 'error') {
     return (
-      <div className="flex items-start gap-2.5 rounded-[12px] border border-clay/30 bg-clay/[0.06] px-3.5 py-3">
-        <AlertTriangle className="mt-0.5 size-4 shrink-0 text-clay" aria-hidden="true" />
-        <div className="min-w-0">
-          <p className="text-[13.5px] text-ink">{content || 'Something went wrong answering that.'}</p>
-          <button
-            type="button"
-            onClick={onRetry}
-            className="mt-1.5 text-[12.5px] font-medium text-accent hover:underline"
-          >
+      <Alert
+        title={content || 'Something went wrong answering that.'}
+        action={
+          <Button variant="outline" size="sm" onClick={onRetry}>
+            <RotateCcw />
             Try again
-          </button>
-        </div>
-      </div>
+          </Button>
+        }
+      />
     )
   }
 

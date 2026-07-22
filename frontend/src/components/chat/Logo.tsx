@@ -13,11 +13,17 @@ export function StarMark({ className }: { className?: string }) {
   )
 }
 
-export function Logo({ className }: { className?: string }) {
+// One brand mark everywhere it appears (chat, admin) — `context` adds a
+// small suffix instead of every screen inventing its own name. Was three
+// different names across the app (page title, chat, admin header) before.
+export function Logo({ className, context }: { className?: string; context?: string }) {
   return (
     <span className={cn('inline-flex items-center gap-2', className)}>
       <StarMark className="size-[18px] text-accent" />
-      <span className="font-serif text-[17px] tracking-[-0.01em] text-ink">Ask&nbsp;Sitare</span>
+      <span className="font-serif text-[17px] tracking-[-0.01em] text-ink">
+        Ask&nbsp;Sitare
+        {context && <span className="text-muted"> · {context}</span>}
+      </span>
     </span>
   )
 }

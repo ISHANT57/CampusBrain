@@ -85,7 +85,7 @@ function SidebarContent({
         {groups.map(([label, items]) => (
           <section key={label} className="mb-4">
             <h2 className="eyebrow px-2 pb-1.5">{label}</h2>
-            <ul className="flex flex-col gap-px">
+            <ul className="flex flex-col gap-1">
               {items.map((c) => (
                 <li key={c.localId} className="group/row relative">
                   <button
@@ -93,9 +93,9 @@ function SidebarContent({
                     onClick={() => onOpen(c.localId)}
                     aria-current={c.localId === activeLocalId ? 'page' : undefined}
                     className={cn(
-                      'w-full truncate rounded-[8px] py-2 pl-2 pr-8 text-left text-[13px] transition-colors',
+                      'w-full truncate rounded-[8px] py-2.5 pl-2.5 pr-8 text-left text-[13px] transition-colors duration-150',
                       c.localId === activeLocalId
-                        ? 'bg-surface text-ink shadow-[inset_0_0_0_1px_var(--color-border)]'
+                        ? 'bg-surface text-ink shadow-[inset_0_0_0_1px_var(--border)]'
                         : 'text-muted hover:bg-surface/70 hover:text-ink',
                     )}
                   >
@@ -105,7 +105,7 @@ function SidebarContent({
                     type="button"
                     onClick={() => onDelete(c.localId)}
                     aria-label={`Delete conversation: ${c.title}`}
-                    className="absolute right-1 top-1/2 flex size-7 -translate-y-1/2 items-center justify-center rounded-[6px] text-faint opacity-0 transition-[opacity,color] hover:text-clay focus-visible:opacity-100 group-hover/row:opacity-100"
+                    className="absolute right-1 top-1/2 flex size-7 -translate-y-1/2 items-center justify-center rounded-[6px] text-faint opacity-0 transition-[opacity,color] hover:text-error focus-visible:opacity-100 group-hover/row:opacity-100"
                   >
                     <Trash2 className="size-3.5" />
                   </button>
