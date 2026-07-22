@@ -1,6 +1,6 @@
 from app.core.database import SessionLocal
-from app.infrastructure.embeddings import embed_text
 from app.infrastructure import storage
+from app.infrastructure.embeddings.provider import get_embedding_provider
 from app.models.chunk import Chunk
 from app.models.document import Document, DocumentStatus
 from app.repositories.vector_repository import upsert_chunks
@@ -17,7 +17,17 @@ def _infer_extraction_method(mime_type: str) -> str:
     return "unstructured"
 
 
-async def process_document(_ctx, document_id: int) -> None:
+def process_document(document_id: int) -> None:
+    """Extract, chunk, embed, and index one document. Runs via FastAPI
+    BackgroundTasks (see api/v1/documents.py) — previously an arq task on a
+    Redis queue; nothing here depended on that transport, so removing the
+    queue only removed indirection, not capability.
+
+    Plain sync def, not async: nothing in this function awaits (embed_text
+    and storage calls are all sync httpx/SDK calls), and BackgroundTasks runs
+    sync callables in a worker thread automatically, so it doesn't block the
+    event loop despite running after the response for /documents is returned.
+    """
     db = SessionLocal()
     try:
         document = db.get(Document, document_id)
@@ -52,9 +62,10 @@ async def process_document(_ctx, document_id: int) -> None:
             db.add_all(chunk_rows)
             db.flush()
 
+            provider = get_embedding_provider()
             points = []
             for chunk in chunk_rows:
-                vector = embed_text(chunk.text)
+                vector = provider.embed(chunk.text)
                 points.append(
                     {
                         "chunk_id": chunk.id,

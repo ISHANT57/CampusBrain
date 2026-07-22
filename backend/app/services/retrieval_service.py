@@ -4,7 +4,7 @@ from sqlalchemy import text as sql_text
 from sqlalchemy.orm import Session
 
 from app.infrastructure import vector_store
-from app.infrastructure.embeddings import embed_text
+from app.infrastructure.embeddings.provider import get_embedding_provider
 
 # Reciprocal Rank Fusion constant. 60 is the value from the original RRF paper
 # and the de-facto default; it damps the influence of any single ranking.
@@ -16,7 +16,7 @@ def semantic_search(org_id: int, query: str, top_k: int = 5) -> list[dict]:
     collection only. Cross-org isolation is structural: we only ever query
     org_{org_id}'s collection, never another's."""
     vector_store.ensure_collection(org_id)  # no-op if it exists; empty search if org never uploaded
-    query_vector = embed_text(query)
+    query_vector = get_embedding_provider().embed(query)
 
     hits = vector_store.get_client().search(
         collection_name=vector_store.collection_name(org_id),

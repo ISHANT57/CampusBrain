@@ -1,19 +1,25 @@
 # Production stack (M60). Differences from docker-compose.yml that matter:
 #   - No bind mounts. Code is baked into images, so what you tested is what
 #     runs; a stray edit on the server can't silently change behaviour.
-#   - Only nginx publishes ports. Postgres/Redis/MinIO/Qdrant/Ollama stay on
-#     the internal network instead of being reachable from the internet.
+#   - Only nginx publishes ports. Postgres/MinIO/Qdrant stay on the internal
+#     network instead of being reachable from the internet.
 #   - uvicorn runs without --reload (the dev Dockerfile's CMD) and with
 #     multiple workers.
 #   - Migrations run as a gated one-shot step before the API starts.
+#
+# No redis, no worker service, no ollama: document processing runs as a
+# FastAPI BackgroundTask inside the backend process (see
+# services/document_processing_service.py) instead of a separate arq worker
+# pulling from a Redis queue, and embeddings come from the Gemini API instead
+# of a self-hosted Ollama instance. See MIGRATION.md for the reasoning.
 #
 # Usage:
 #   cp .env.production.example .env.production   # then fill in real secrets
 #   docker compose -f docker-compose.prod.yml --env-file ../.env.production up -d --build
 
 services:
-  # Runs alembic to completion, then exits. backend/worker wait on it, so the
-  # API never serves against a schema that hasn't been migrated yet.
+  # Runs alembic to completion, then exits. backend waits on it, so the API
+  # never serves against a schema that hasn't been migrated yet.
   migrate:
     build: ../backend
     env_file: [../.env.production]
@@ -28,23 +34,20 @@ services:
     # Overrides the dev CMD, which ends in --reload. --reload watches the
     # filesystem and restarts on change: wasted memory here, and it masks
     # crashes by silently restarting.
+    #
+    # NOTE on --workers 4 + the in-memory rate limiter (core/rate_limit.py):
+    # slowapi's default in-memory store counts per PROCESS. With 4 worker
+    # processes, a client's requests land on whichever process picks them up,
+    # so the @limiter.limit("20/minute") on /ask and /chat is enforced up to
+    # ~4x more loosely than it reads. Fine for this app's traffic level; if
+    # that ever matters, point storage_uri at a shared store (Upstash Redis's
+    # free tier, e.g.) rather than dropping to --workers 1.
     command:
       ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4"]
     expose: ["8000"]
     restart: unless-stopped
     depends_on:
       migrate: { condition: service_completed_successfully }
-      redis: { condition: service_healthy }
-      minio: { condition: service_healthy }
-
-  worker:
-    build: ../backend
-    env_file: [../.env.production]
-    command: ["arq", "app.workers.worker.WorkerSettings"]
-    restart: unless-stopped
-    depends_on:
-      migrate: { condition: service_completed_successfully }
-      redis: { condition: service_healthy }
       minio: { condition: service_healthy }
 
   # Serves the built SPA and proxies /api to the backend. The only service
@@ -74,17 +77,6 @@ services:
       timeout: 5s
       retries: 5
 
-  redis:
-    image: redis:7-alpine
-    volumes:
-      - redis_data:/data
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-
   minio:
     image: minio/minio:latest
     env_file: [../.env.production]
@@ -104,18 +96,7 @@ services:
       - qdrant_data:/qdrant/storage
     restart: unless-stopped
 
-  # Still required: embeddings (BGE-M3) are served by Ollama even though the
-  # LLM itself goes out to OpenRouter. The model must be pulled once on the
-  # host after first boot — see docker/README.md.
-  ollama:
-    image: ollama/ollama:latest
-    volumes:
-      - ollama_data:/root/.ollama
-    restart: unless-stopped
-
 volumes:
   postgres_data:
-  redis_data:
   minio_data:
   qdrant_data:
-  ollama_data:

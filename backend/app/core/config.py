@@ -20,13 +20,14 @@ class Settings(BaseSettings):
     minio_internal_port: int = 9000
     minio_bucket_name: str = "documents"
 
-    redis_host: str = "redis"
-    redis_internal_port: int = 6379
-
-    ollama_host: str = "ollama"
-    ollama_internal_port: int = 11434
-    embedding_model: str = "bge-m3"
-    embedding_dim: int = 1024  # BGE-M3 output size (verified in M28)
+    # Embedding provider. embedding_dim is authoritative for the Qdrant
+    # collection size (vector_store reads it via the provider, not this field
+    # directly) — change it together with embedding_model, never alone, or
+    # vector_store's dimension-mismatch check will recreate every collection
+    # for no reason.
+    gemini_api_key: str = ""
+    embedding_model: str = "gemini-embedding-001"
+    embedding_dim: int = 768
 
     qdrant_host: str = "qdrant"
     qdrant_internal_port: int = 6333
@@ -35,10 +36,6 @@ class Settings(BaseSettings):
     # Change LLM_MODEL in .env to try other OpenRouter models. Default is a
     # free-tier model to avoid unexpected cost.
     llm_model: str = "openai/gpt-oss-20b:free"
-
-    @property
-    def ollama_url(self) -> str:
-        return f"http://{self.ollama_host}:{self.ollama_internal_port}"
 
     @property
     def database_url(self) -> str:

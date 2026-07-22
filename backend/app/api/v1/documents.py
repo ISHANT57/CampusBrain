@@ -1,5 +1,5 @@
 # pyrefly: ignore [missing-import]
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile, status
 # pyrefly: ignore [missing-import]
 from sqlalchemy.orm import Session
 
@@ -8,14 +8,15 @@ from app.core.dependencies import get_current_user, require_role
 from app.models.user import User, UserRole
 from app.repositories.document_repository import DocumentRepository
 from app.schemas.document import DocumentRead
+from app.services.document_processing_service import process_document
 from app.services.document_service import DocumentValidationError, upload_document
-from app.workers.pool import get_arq_pool
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
 
 @router.post("", response_model=DocumentRead, status_code=status.HTTP_201_CREATED)
 async def upload(
+    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     collection_id: int | None = Form(None),
     current_user: User = Depends(require_role(UserRole.FACULTY, UserRole.ADMIN, UserRole.SUPER_ADMIN)),
@@ -33,8 +34,13 @@ async def upload(
     except DocumentValidationError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
-    pool = await get_arq_pool()
-    await pool.enqueue_job("process_document", document.id)
+    # Runs after the response is sent, in the same process — no queue, no
+    # separate worker. Was arq enqueuing onto Redis; process_document itself
+    # never depended on that transport (see its docstring), so this is a pure
+    # infrastructure simplification, not a behavior change to the API: the
+    # client still gets the document back immediately at PENDING/PROCESSING
+    # and polls GET /documents/{id} for status, exactly as before.
+    background_tasks.add_task(process_document, document.id)
 
     return document
 

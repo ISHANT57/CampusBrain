@@ -16,12 +16,16 @@ docker compose -f docker/docker-compose.yml --env-file .env up -d --build
 | postgres | 5432        | Relational DB          |
 | backend  | 8000        | FastAPI (`/health`)    |
 | frontend | 5173        | Vite dev server        |
-| redis    | 6379        | Cache / job queue      |
 | minio    | 9000 / 9001 | Object storage / console |
 | qdrant   | 6333        | Vector DB              |
-| ollama   | 11434       | Local LLM runtime      |
 
-No app code uses redis/minio/qdrant/ollama yet — they're wired in at M5 purely to prove the full stack boots; each gets real code in its own later phase.
+No separate worker or cache service: document processing runs as a FastAPI
+`BackgroundTask` inside `backend` (see `backend/app/services/document_processing_service.py`),
+and the LLM (OpenRouter) and embeddings (Gemini, see `backend/MIGRATION.md`) are
+both hosted APIs rather than self-hosted arq/Redis/Ollama. This is a deliberate
+change from the original M5 stack, made so the whole thing fits Render's free
+tier — see `backend/MIGRATION.md` for the full reasoning and what to check if
+you're diagnosing something that behaves differently than before.
 
 ---
 

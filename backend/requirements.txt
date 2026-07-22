@@ -11,7 +11,6 @@ email-validator==2.2.0
 minio==7.2.9
 python-magic==0.4.27
 python-multipart==0.0.12
-arq==0.26.1
 PyMuPDF==1.24.10
 Pillow==10.4.0
 unstructured[docx,pptx,xlsx,csv,md]==0.15.13

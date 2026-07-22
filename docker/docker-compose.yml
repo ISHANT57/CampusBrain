@@ -27,24 +27,6 @@ services:
         condition: service_healthy
       minio:
         condition: service_healthy
-      redis:
-        condition: service_healthy
-
-  worker:
-    build: ../backend
-    env_file:
-      - ../.env
-    volumes:
-      - ../backend:/app
-      - paddleocr_models:/root/.paddleocr
-    depends_on:
-      postgres:
-        condition: service_healthy
-      minio:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    command: ["arq", "app.workers.worker.WorkerSettings"]
 
   frontend:
     build: ../frontend
@@ -64,18 +46,6 @@ services:
       - /app/node_modules
     depends_on:
       - backend
-
-  redis:
-    image: redis:7-alpine
-    ports:
-      - "${REDIS_PORT:-6379}:6379"
-    volumes:
-      - redis_data:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
 
   minio:
     image: minio/minio:latest
@@ -100,17 +70,8 @@ services:
     volumes:
       - qdrant_data:/qdrant/storage
 
-  ollama:
-    image: ollama/ollama:latest
-    ports:
-      - "${OLLAMA_PORT:-11434}:11434"
-    volumes:
-      - ollama_data:/root/.ollama
-
 volumes:
   postgres_data:
-  redis_data:
   minio_data:
   qdrant_data:
-  ollama_data:
   paddleocr_models:
