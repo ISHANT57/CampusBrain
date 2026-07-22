@@ -1,3 +1,5 @@
+import re
+
 from sqlalchemy.orm import Session
 
 from app.infrastructure.llm.provider import get_llm_provider
@@ -8,6 +10,55 @@ from app.services.retrieval_service import hybrid_search
 # Below this top-hit *semantic* similarity, we treat the question as
 # out-of-corpus and refuse rather than let the model answer ungrounded (M39).
 RELEVANCE_THRESHOLD = 0.35
+
+CITATION_MARKER = re.compile(r"\[(\d+)\]")
+
+
+def keep_cited_sources(answer: str, hits: list[dict]) -> tuple[str, list[dict]]:
+    """Return the answer with citation markers renumbered, and only the sources
+    it actually cites.
+
+    Retrieval always returns top_k chunks, but the model typically grounds its
+    answer in a subset — and when it declines to answer, in none of them.
+    Returning every retrieved chunk made the UI show a "5 sources" list under
+    answers that referenced one of them, or under an outright refusal, which
+    overstates how grounded the answer is. Sources should be evidence for what
+    was said, not a log of what was searched.
+
+    Markers are renumbered to stay contiguous: if the model cites [2] and [4],
+    the user sees sources 1 and 2, not 2 and 4 with gaps that read as missing
+    items. A marker pointing outside the retrieved set (a hallucinated [9]) is
+    dropped entirely rather than left dangling.
+    """
+    seen: list[int] = []
+    for match in CITATION_MARKER.finditer(answer):
+        n = int(match.group(1))
+        if 1 <= n <= len(hits) and n not in seen:
+            seen.append(n)
+
+    if not seen:
+        # Strip any markers that survived — all of them are out of range, so
+        # leaving them would show the user a reference to nothing.
+        return CITATION_MARKER.sub("", answer).strip(), []
+
+    seen.sort()
+    renumber = {old: new for new, old in enumerate(seen, start=1)}
+    rewritten = CITATION_MARKER.sub(
+        lambda m: f"[{renumber[int(m.group(1))]}]" if int(m.group(1)) in renumber else "",
+        answer,
+    )
+
+    citations = [
+        {
+            "index": new,
+            "document_id": hits[old - 1]["document_id"],
+            "page_number": hits[old - 1]["page_number"],
+            "chunk_id": hits[old - 1]["chunk_id"],
+            "excerpt": hits[old - 1]["text"][:200],
+        }
+        for old, new in sorted(renumber.items(), key=lambda kv: kv[1])
+    ]
+    return rewritten, citations
 
 
 def answer_question(
@@ -38,14 +89,9 @@ def answer_question(
     prompt = build_rag_prompt(question, sanitized_hits, history=history)
     answer = get_llm_provider().generate(prompt)
 
-    citations = [
-        {
-            "index": i,
-            "document_id": hit["document_id"],
-            "page_number": hit["page_number"],
-            "chunk_id": hit["chunk_id"],
-            "excerpt": hit["text"][:200],
-        }
-        for i, hit in enumerate(sanitized_hits, start=1)
-    ]
+    # Only surface the sources the answer actually cites. Passing the
+    # retrieval threshold means the corpus looked relevant; it does not mean
+    # the model found an answer in every chunk, and it may still have declined
+    # to answer at all.
+    answer, citations = keep_cited_sources(answer, sanitized_hits)
     return {"answer": answer, "citations": citations}
