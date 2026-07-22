@@ -72,8 +72,11 @@ import magic  # noqa: E402
 
 from app.core.database import SessionLocal  # noqa: E402
 from app.core.upload_policy import MAX_UPLOAD_SIZE_BYTES, SUPPORTED_TYPES, is_supported  # noqa: E402
+from app.infrastructure import storage as object_storage  # noqa: E402
+from app.models.chunk import Chunk  # noqa: E402
 from app.models.document import Document, DocumentStatus  # noqa: E402
 from app.models.organization import Organization  # noqa: E402
+from app.repositories.vector_repository import delete_document_points  # noqa: E402
 from app.services.document_processing_service import index_document  # noqa: E402
 
 
@@ -156,8 +159,6 @@ def ingest_file(
     if document is None:
         storage_key = None
         if upload_blobs:
-            from app.infrastructure import storage as object_storage
-
             storage_key = f"{org_id}/{uuid.uuid4()}{path.suffix.lower()}"
             object_storage.put_object(storage_key, content, content_type=mime_type)
 
@@ -195,11 +196,72 @@ def ingest_file(
     return "indexed", chunk_count
 
 
+def forget(db, pattern: str, org_id: int, apply: bool) -> list[str]:
+    """Remove documents whose filename matches `pattern` from the knowledge
+    base entirely: Qdrant vectors, chunk rows, the document row, and the
+    stored blob if there is one.
+
+    Deleting the source file from disk is NOT enough — the extracted text
+    lives in Postgres chunks and the vectors in Qdrant, so a document stays
+    fully answerable long after the file is gone. This is the only way to
+    actually make the chatbot stop citing it.
+
+    Ordering matters: vectors are deleted first, because delete_document_points
+    filters on document_id, and the chunk/document rows it needs to be
+    meaningful are about to disappear. If this run dies midway, a re-run is
+    safe — every step is a no-op once already done.
+    """
+    matches = (
+        db.query(Document)
+        .filter(Document.org_id == org_id, Document.filename.ilike(f"%{pattern}%"))
+        .all()
+    )
+    if not matches:
+        return []
+
+    removed = []
+    for document in matches:
+        chunk_count = db.query(Chunk).filter(Chunk.document_id == document.id).count()
+        removed.append(f"{document.filename}  (id={document.id}, {chunk_count} chunks)")
+        if not apply:
+            continue
+
+        delete_document_points(org_id, document.id)
+        db.query(Chunk).filter(Chunk.document_id == document.id).delete(synchronize_session=False)
+        if document.storage_key:
+            try:
+                object_storage.delete_object(document.storage_key)
+            except Exception as e:  # noqa: BLE001
+                # The DB/vector cleanup is what stops the chatbot answering
+                # from this document; an orphaned blob is untidy, not a leak
+                # of the same kind. Report and continue rather than abort
+                # halfway and leave the vectors live.
+                print(f"  ! could not delete blob {document.storage_key}: {e}")
+        db.delete(document)
+
+    if apply:
+        db.commit()
+    return removed
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description="Preload a folder of documents into the app's Postgres + Qdrant.",
     )
-    parser.add_argument("folder", type=Path, help="folder to scan recursively")
+    parser.add_argument(
+        "folder", type=Path, nargs="?", help="folder to scan recursively (omit with --forget)"
+    )
+    parser.add_argument(
+        "--forget",
+        metavar="PATTERN",
+        help="remove indexed documents whose filename contains PATTERN — deletes their "
+        "vectors, chunks and metadata. Lists matches and changes nothing unless --yes.",
+    )
+    parser.add_argument(
+        "--yes",
+        action="store_true",
+        help="actually perform --forget's deletion (it previews by default)",
+    )
     parser.add_argument(
         "--org-id",
         type=int,
@@ -222,6 +284,32 @@ def main() -> int:
         help="also store original files in object storage (off by default; see module docstring)",
     )
     args = parser.parse_args()
+
+    if args.forget:
+        db = SessionLocal()
+        try:
+            removed = forget(db, args.forget, args.org_id, apply=args.yes)
+        finally:
+            db.close()
+
+        if not removed:
+            print(f"\nNo indexed document matches {args.forget!r} in org {args.org_id}.\n")
+            return 0
+
+        verb = "Removed" if args.yes else "Would remove"
+        print(f"\n{verb} {len(removed)} document(s) matching {args.forget!r}:")
+        for line in removed:
+            print(f"    {line}")
+        if args.yes:
+            print("\nVectors, chunks and metadata deleted. The chatbot can no longer cite these.")
+            print("Delete the source file too, or the next ingest run will re-index it.\n")
+        else:
+            print("\nPreview only — nothing was deleted. Re-run with --yes to apply.\n")
+        return 0
+
+    if args.folder is None:
+        print("error: a folder is required unless --forget is used", file=sys.stderr)
+        return 2
 
     if not args.folder.is_dir():
         print(f"error: {args.folder} is not a directory", file=sys.stderr)
