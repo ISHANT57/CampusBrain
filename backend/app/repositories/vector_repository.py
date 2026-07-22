@@ -1,7 +1,11 @@
 # pyrefly: ignore [missing-import]
-from qdrant_client.models import FieldCondition, Filter, FilterSelector, MatchValue, PointStruct
+from qdrant_client.models import PointIdsList, PointStruct
 # pyrefly: ignore [missing-import]
 from app.infrastructure import vector_store
+
+# Qdrant caps how much it will accept in one request; a long document can
+# produce thousands of chunks, so deletes go out in batches.
+_DELETE_BATCH = 1000
 
 
 def upsert_chunks(org_id: int, points: list[dict]) -> None:
@@ -17,17 +21,25 @@ def upsert_chunks(org_id: int, points: list[dict]) -> None:
     )
 
 
-def delete_document_points(org_id: int, document_id: int) -> None:
-    """Drop every vector belonging to one document, by payload filter rather
-    than by id — the caller is re-indexing and is about to delete the chunk
-    rows whose ids those points use, so it can't enumerate them afterwards."""
-    if not vector_store.get_client().collection_exists(vector_store.collection_name(org_id)):
+def delete_points(org_id: int, point_ids: list[int]) -> None:
+    """Drop specific vectors by id. Callers pass chunk ids, which ARE the point
+    ids (see upsert_chunks).
+
+    Deliberately by id rather than by a payload filter on document_id: Qdrant
+    rejects filtering on a payload key that has no index
+    ("Index required but not found for \"document_id\"") — self-hosted is
+    lenient about this, Qdrant Cloud is not. Deleting by id needs no index, and
+    the caller always has the chunk rows in hand anyway, so this avoids both
+    the failure and having to maintain a payload index just to delete.
+    """
+    if not point_ids:
         return
-    vector_store.get_client().delete(
-        collection_name=vector_store.collection_name(org_id),
-        points_selector=FilterSelector(
-            filter=Filter(
-                must=[FieldCondition(key="document_id", match=MatchValue(value=document_id))]
-            )
-        ),
-    )
+    name = vector_store.collection_name(org_id)
+    client = vector_store.get_client()
+    if not client.collection_exists(name):
+        return
+    for i in range(0, len(point_ids), _DELETE_BATCH):
+        client.delete(
+            collection_name=name,
+            points_selector=PointIdsList(points=point_ids[i : i + _DELETE_BATCH]),
+        )

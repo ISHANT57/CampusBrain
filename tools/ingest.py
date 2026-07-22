@@ -76,7 +76,7 @@ from app.infrastructure import storage as object_storage  # noqa: E402
 from app.models.chunk import Chunk  # noqa: E402
 from app.models.document import Document, DocumentStatus  # noqa: E402
 from app.models.organization import Organization  # noqa: E402
-from app.repositories.vector_repository import delete_document_points  # noqa: E402
+from app.repositories.vector_repository import delete_points  # noqa: E402
 from app.services.document_processing_service import index_document  # noqa: E402
 
 
@@ -206,10 +206,11 @@ def forget(db, pattern: str, org_id: int, apply: bool) -> list[str]:
     fully answerable long after the file is gone. This is the only way to
     actually make the chatbot stop citing it.
 
-    Ordering matters: vectors are deleted first, because delete_document_points
-    filters on document_id, and the chunk/document rows it needs to be
-    meaningful are about to disappear. If this run dies midway, a re-run is
-    safe — every step is a no-op once already done.
+    Ordering matters: the chunk ids have to be read before the chunk rows are
+    deleted, because those ids are the Qdrant point ids. Drop the rows first
+    and the vectors become unreachable — still being served, with nothing left
+    pointing at them. If this run dies midway a re-run is safe; every step is
+    a no-op once already done.
     """
     matches = (
         db.query(Document)
@@ -221,12 +222,16 @@ def forget(db, pattern: str, org_id: int, apply: bool) -> list[str]:
 
     removed = []
     for document in matches:
-        chunk_count = db.query(Chunk).filter(Chunk.document_id == document.id).count()
-        removed.append(f"{document.filename}  (id={document.id}, {chunk_count} chunks)")
+        # Chunk ids ARE the Qdrant point ids, so this one query serves both the
+        # preview count and the vector deletion.
+        chunk_ids = [
+            row[0] for row in db.query(Chunk.id).filter(Chunk.document_id == document.id).all()
+        ]
+        removed.append(f"{document.filename}  (id={document.id}, {len(chunk_ids)} chunks)")
         if not apply:
             continue
 
-        delete_document_points(org_id, document.id)
+        delete_points(org_id, chunk_ids)
         db.query(Chunk).filter(Chunk.document_id == document.id).delete(synchronize_session=False)
         if document.storage_key:
             try:

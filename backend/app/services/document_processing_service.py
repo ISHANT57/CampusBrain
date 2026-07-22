@@ -3,7 +3,7 @@ from app.infrastructure import storage
 from app.infrastructure.embeddings.provider import get_embedding_provider
 from app.models.chunk import Chunk
 from app.models.document import Document, DocumentStatus
-from app.repositories.vector_repository import delete_document_points, upsert_chunks
+from app.repositories.vector_repository import delete_points, upsert_chunks
 from app.services.chunking.recursive_chunker import chunk_pages
 from app.services.extraction.cleaner import clean_text
 from app.services.extraction.router import extract
@@ -46,7 +46,7 @@ def index_document(db, document: Document, content: bytes) -> int:
     # search results forever, pointing at chunk rows that no longer exist.
     existing = db.query(Chunk).filter(Chunk.document_id == document.id).all()
     if existing:
-        delete_document_points(document.org_id, document.id)
+        delete_points(document.org_id, [chunk.id for chunk in existing])
         for chunk in existing:
             db.delete(chunk)
         db.flush()
