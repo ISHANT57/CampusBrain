@@ -103,6 +103,21 @@ Vercel's own domain (no backend there) and every request 404s — this is the
 one frontend change that split-origin deployment requires, and it's now in
 place.
 
+**`frontend/vercel.json` (already added) — required for client-side routing.**
+Vercel's own docs are explicit that a Vite SPA's deep links ("won't work out
+of the box") without this: visiting `/login` or `/chat` directly (or
+refreshing on one) has no matching physical file in the build output, so
+Vercel's static host 404s instead of falling back to `index.html`, where
+React Router would actually handle the route. The file:
+```json
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
+}
+```
+No dashboard setting for this — it has to be a committed file, which is why
+it's already in the repo rather than something to configure per-deploy.
+
 ## 3. Close the loop
 
 Once both are deployed:
