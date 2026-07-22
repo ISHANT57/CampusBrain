@@ -1,17 +1,25 @@
-# Production stack (M60). Differences from docker-compose.yml that matter:
+# Production stack for the self-hosted-VPS path. If you're deploying to
+# Render + Vercel instead (the currently chosen path — see backend/MIGRATION.md
+# and DEPLOYMENT.md), you don't use this file at all: Render builds
+# backend/Dockerfile directly and Vercel builds the frontend; there's no
+# docker-compose involved. Kept as a documented alternative for a plain VPS.
+#
+# Differences from docker-compose.yml that matter:
 #   - No bind mounts. Code is baked into images, so what you tested is what
 #     runs; a stray edit on the server can't silently change behaviour.
-#   - Only nginx publishes ports. Postgres/MinIO/Qdrant stay on the internal
+#   - Only nginx publishes ports. Postgres/Qdrant stay on the internal
 #     network instead of being reachable from the internet.
 #   - uvicorn runs without --reload (the dev Dockerfile's CMD) and with
 #     multiple workers.
 #   - Migrations run as a gated one-shot step before the API starts.
 #
-# No redis, no worker service, no ollama: document processing runs as a
-# FastAPI BackgroundTask inside the backend process (see
+# No redis, no worker service, no ollama, no self-hosted minio: document
+# processing runs as a FastAPI BackgroundTask inside the backend process (see
 # services/document_processing_service.py) instead of a separate arq worker
-# pulling from a Redis queue, and embeddings come from the Gemini API instead
-# of a self-hosted Ollama instance. See MIGRATION.md for the reasoning.
+# pulling from a Redis queue; embeddings come from the Gemini API instead of a
+# self-hosted Ollama instance; object storage is Supabase's S3-compatible API
+# (set STORAGE_* in .env.production same as the Render path — see
+# backend/MIGRATION.md for the reasoning on all three).
 #
 # Usage:
 #   cp .env.production.example .env.production   # then fill in real secrets
@@ -48,7 +56,6 @@ services:
     restart: unless-stopped
     depends_on:
       migrate: { condition: service_completed_successfully }
-      minio: { condition: service_healthy }
 
   # Serves the built SPA and proxies /api to the backend. The only service
   # with published ports.
@@ -77,19 +84,6 @@ services:
       timeout: 5s
       retries: 5
 
-  minio:
-    image: minio/minio:latest
-    env_file: [../.env.production]
-    command: server /data --console-address ":9001"
-    volumes:
-      - minio_data:/data
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-
   qdrant:
     image: qdrant/qdrant:latest
     volumes:
@@ -98,5 +92,4 @@ services:
 
 volumes:
   postgres_data:
-  minio_data:
   qdrant_data:

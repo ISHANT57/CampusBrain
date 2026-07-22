@@ -8,12 +8,12 @@ pydantic-settings==2.5.2
 bcrypt==4.2.0
 python-jose[cryptography]==3.3.0
 email-validator==2.2.0
-minio==7.2.9
+boto3==1.43.53
 python-magic==0.4.27
 python-multipart==0.0.12
 PyMuPDF==1.24.10
 Pillow==10.4.0
-unstructured[docx,pptx,xlsx,csv,md]==0.15.13
+unstructured[docx,pptx,xlsx,csv,md,doc,ppt,xls]==0.15.13
 paddlepaddle==2.6.2
 paddleocr==2.8.1
 langchain-text-splitters==0.3.0

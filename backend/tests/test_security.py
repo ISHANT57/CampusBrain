@@ -1,6 +1,7 @@
 """Regression tests for the four security bugs found during development.
 
-Integration-style: runs against the real Postgres/MinIO in the dev stack, via
+Integration-style: runs against the real Postgres + Supabase Storage
+configured in .env, via
     docker compose exec backend pytest
 Each test states the attack it prevents, so a future change that reintroduces
 the bug fails here instead of in production.

@@ -6,8 +6,15 @@ WORKDIR /app
 # libgl1/libglib2.0-0: opencv (PaddleOCR's dependency) needs these on slim Debian.
 # libgomp1: paddlepaddle's compiled core is linked against OpenMP and won't import without it.
 # fonts-dejavu-core: lets test fixtures render real, OCR-legible text.
+# libreoffice: unstructured's doc/ppt/xls[legacy binary Office] extras shell
+# out to `soffice` to convert those formats before parsing them — added for
+# .doc/.ppt/.xls support (upload_policy.py). NOT build-verified (no local
+# Docker daemon while writing this) and it's a large package — expect a real
+# image-size and cold-start increase on Render's free tier. If that cost
+# isn't worth 3 file formats, drop this line and remove .doc/.ppt/.xls from
+# upload_policy.py's SUPPORTED_TYPES instead.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libmagic1 libgl1 libglib2.0-0 libgomp1 fonts-dejavu-core \
+    libmagic1 libgl1 libglib2.0-0 libgomp1 fonts-dejavu-core libreoffice \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .

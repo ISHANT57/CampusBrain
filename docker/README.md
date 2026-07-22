@@ -16,8 +16,11 @@ docker compose -f docker/docker-compose.yml --env-file .env up -d --build
 | postgres | 5432        | Relational DB          |
 | backend  | 8000        | FastAPI (`/health`)    |
 | frontend | 5173        | Vite dev server        |
-| minio    | 9000 / 9001 | Object storage / console |
 | qdrant   | 6333        | Vector DB              |
+
+Object storage has no local dev container either — dev uses Supabase Storage
+the same as production, via `STORAGE_*` in `.env` (see `.env.example`).
+Everything is free-tier: a Supabase project costs nothing to create.
 
 No separate worker or cache service: document processing runs as a FastAPI
 `BackgroundTask` inside `backend` (see `backend/app/services/document_processing_service.py`),
@@ -29,15 +32,22 @@ you're diagnosing something that behaves differently than before.
 
 ---
 
-# Production deployment (M60 / M61)
+# Production deployment — self-hosted VPS alternative (M60 / M61)
 
-Uses `docker-compose.prod.yml`, not the dev file. What differs, and why:
+**This is not the chosen deployment path.** The actual target is Render
+(backend) + Vercel (frontend) — see `DEPLOYMENT.md` at the repo root for that.
+This section documents `docker-compose.prod.yml` as a documented alternative
+if you'd rather run everything on your own VPS instead.
+
+What differs from the dev file, and why:
 
 - **No bind mounts.** Code is baked into images, so the thing you tested is the
   thing that runs.
-- **Only nginx publishes ports.** Postgres, Redis, MinIO, Qdrant and Ollama sit
-  on the internal Docker network and are unreachable from the internet. In dev
-  they're all exposed on the host, which would be a serious hole in production.
+- **Only nginx publishes ports.** Postgres and Qdrant sit on the internal
+  Docker network and are unreachable from the internet. In dev they're both
+  exposed on the host, which would be a serious hole in production. (Object
+  storage is Supabase, not a container, in both dev and prod — see
+  `backend/MIGRATION.md`.)
 - **`uvicorn` without `--reload`**, with 4 workers. The dev image's `CMD` ends
   in `--reload`; the prod Compose file overrides it.
 - **Migrations are gated.** A one-shot `migrate` service runs
@@ -49,8 +59,8 @@ Uses `docker-compose.prod.yml`, not the dev file. What differs, and why:
 
 ## First deploy
 
-On a fresh VM with Docker installed (~4–8 GB RAM; no GPU needed — the LLM is
-OpenRouter, and Ollama only serves BGE-M3 embeddings):
+On a fresh VM with Docker installed (~2–4 GB RAM is enough — the LLM is
+OpenRouter and embeddings are Gemini, both hosted APIs; no Ollama, no GPU):
 
 ```bash
 git clone https://github.com/ISHANT57/CampusBrain.git
@@ -58,19 +68,14 @@ cd CampusBrain
 
 cp .env.production.example .env.production
 # Fill in every blank. Generate real secrets:
-#   openssl rand -base64 32   # POSTGRES_PASSWORD, MINIO_ROOT_PASSWORD
+#   openssl rand -base64 32   # POSTGRES_PASSWORD
 #   openssl rand -hex 32      # JWT_SECRET_KEY
-# and paste your OpenRouter API key.
+# plus your OpenRouter key, Gemini key, and Supabase Storage S3 credentials
+# (endpoint/region/access key/secret — see the STORAGE_* section in the file).
 nano .env.production
 
 cd docker
 docker compose -f docker-compose.prod.yml --env-file ../.env.production up -d --build
-```
-
-Then pull the embedding model once (it persists in the `ollama_data` volume):
-
-```bash
-docker compose -f docker-compose.prod.yml exec ollama ollama pull bge-m3
 ```
 
 Verify:
@@ -104,8 +109,11 @@ Requires a domain whose DNS A record points at the server. Then:
 
 ## Still open before calling this production-ready
 
-- **CORS** — `backend/app/main.py` sets `allow_origins=["*"]`. Lock it to the
-  real origin.
+- **CORS** — resolved. `backend/app/main.py` reads `CORS_ALLOWED_ORIGINS`
+  (comma-separated) instead of a hardcoded `["*"]`; set it to your real
+  frontend origin(s) in `.env.production`.
 - **Backups** — no Postgres dump schedule yet (roadmap M64).
 - **CI/CD** — images are built on the server here; M62–M63 move that to
   GitHub Actions.
+- **.doc/.ppt/.xls uploads** — need LibreOffice in `backend/Dockerfile` (added,
+  not build-verified — see the comment there and `backend/MIGRATION.md`).

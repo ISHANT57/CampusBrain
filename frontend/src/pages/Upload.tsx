@@ -43,8 +43,8 @@ export default function Upload() {
     <div className="page">
       <h2>Upload documents</h2>
       <p className="muted">
-        PDF, DOCX, PPTX, XLSX, CSV, Markdown, TXT or images. Scanned pages are read with OCR. Only
-        Faculty, Admin and Super Admin can upload.
+        PDF, Word (.doc/.docx), PowerPoint (.ppt/.pptx), Excel (.xls/.xlsx), CSV, Markdown, TXT,
+        JSON, HTML or XML. Max 100 MB. Only Faculty, Admin and Super Admin can upload.
       </p>
 
       <div
@@ -62,6 +62,12 @@ export default function Upload() {
           type="file"
           multiple
           hidden
+          // Mirrors backend/app/core/upload_policy.py's SUPPORTED_TYPES keys —
+          // a browser-level hint only, not real validation (the backend
+          // re-checks the actual file bytes regardless; this list is a
+          // second source of truth to keep in sync manually, not shared code,
+          // since the frontend can't import a Python module).
+          accept=".pdf,.txt,.md,.csv,.xlsx,.xls,.docx,.doc,.pptx,.ppt,.json,.html,.xml"
           onChange={(e) => e.target.files && handleFiles(e.target.files)}
         />
       </div>
