@@ -1,0 +1,19 @@
+# Repo-root build context (used by docker/nginx/Dockerfile). Without this the
+# whole working tree — .git, both node_modules trees, model caches — gets sent
+# to the daemon on every build.
+.git
+.gitignore
+**/node_modules
+**/__pycache__
+**/*.pyc
+frontend/dist
+frontend/.vite
+backend/tests
+.env
+.env.*
+!.env.example
+!.env.production.example
+*.md
+!README.md
+.vscode
+.idea
