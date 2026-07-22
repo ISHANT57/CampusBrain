@@ -4,32 +4,18 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.core.dependencies import get_current_user, require_role
+from app.core.dependencies import get_current_user
 from app.core.rate_limit import limiter
 from app.core.security import create_access_token
-from app.models.user import User, UserRole
-from app.schemas.auth import LoginRequest, RegisterRequest, TokenResponse
+from app.models.user import User
+from app.schemas.auth import LoginRequest, TokenResponse
 from app.schemas.user import UserRead
-from app.services.user_service import EmailAlreadyExistsError, authenticate_user, register_user
+from app.services.user_service import authenticate_user
 
+# Staff-only. Students use the chatbot anonymously and never authenticate, so
+# there is deliberately no self-registration endpoint — accounts are created
+# out-of-band with backend/scripts/create_admin.py.
 router = APIRouter(prefix="/auth", tags=["auth"])
-
-
-@router.post("/register", response_model=UserRead, status_code=status.HTTP_201_CREATED)
-@limiter.limit("5/minute")
-def register(request: Request, payload: RegisterRequest, db: Session = Depends(get_db)):
-    # Public self-registration is always Student. Faculty/Admin creation
-    # will be a separate authenticated endpoint (not built yet).
-    try:
-        user = register_user(
-            db, org_id=payload.org_id, email=payload.email, password=payload.password, role=UserRole.STUDENT
-        )
-    except EmailAlreadyExistsError:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Email already registered for this organization",
-        )
-    return user
 
 
 @router.post("/login", response_model=TokenResponse)
@@ -45,8 +31,3 @@ def login(request: Request, payload: LoginRequest, db: Session = Depends(get_db)
 @router.get("/me", response_model=UserRead)
 def me(current_user: User = Depends(get_current_user)):
     return current_user
-
-
-@router.get("/admin-check")
-def admin_check(_: User = Depends(require_role(UserRole.ADMIN, UserRole.SUPER_ADMIN))):
-    return {"ok": True}

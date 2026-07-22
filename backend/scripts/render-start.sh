@@ -8,6 +8,19 @@
 set -e
 
 alembic upgrade head
+
+# There is no sign-up page and no Shell tab on the free tier, so this is the
+# only way an admin account can come into existence on Render. Idempotent:
+# creates the account, or resets its password to match the env var. Unset
+# ADMIN_EMAIL once you're in and it's skipped entirely — the account stays.
+# `|| echo`, not bare: set -e is on, and a rejected password (too short) or a
+# typo'd email must not stop uvicorn from booting. Students losing the chatbot
+# because an admin credential was wrong is the worse failure of the two — the
+# error lands in Render's logs and the service still serves.
+if [ -n "$ADMIN_EMAIL" ]; then
+    python scripts/create_admin.py --email "$ADMIN_EMAIL" \
+        || echo "!!! admin bootstrap failed (see error above) — starting anyway"
+fi
 # Single worker, deliberately: Render free tier is 512Mi RAM total, and this
 # app imports paddlepaddle/paddleocr, which are heavy enough that 4 workers
 # (4 full copies of the process) OOM-killed a real deploy. Render itself

@@ -1,14 +1,20 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { api } from '../../api/client'
+import { api, type ChatTurn } from '../../api/client'
 import type { ChatMessage, Conversation } from './types'
 
 const STORE = 'cb-chat-conversations'
+// Mirrors MAX_HISTORY_TURNS / the per-turn max_length in
+// backend/app/schemas/chat.py — the server rejects (422) anything past these,
+// so trim here rather than let a long chat start failing to send.
+const MAX_HISTORY_TURNS = 12
+const MAX_TURN_CHARS = 4000
 const uid = () => Math.random().toString(36).slice(2, 10)
 const titleFrom = (text: string) => (text.length > 46 ? text.slice(0, 46).trimEnd() + '…' : text)
 
-// Local-only history: the backend has no "list my conversations" endpoint
-// yet (only chat-by-conversation_id), so the sidebar is per-browser via
-// localStorage. Swap for a real fetch once that endpoint exists.
+// Local-only history, and now the only copy that exists: students chat
+// anonymously, so the backend stores no transcript at all. Clearing site data
+// clears the chats. That's the trade for zero-friction access — if history
+// needs to survive a browser wipe, it needs an account to hang off.
 function load(): Conversation[] {
   try {
     const raw = JSON.parse(localStorage.getItem(STORE) || 'null')
@@ -121,7 +127,13 @@ export function useChat() {
       const replyMsg: ChatMessage = { id: replyId, role: 'assistant', content: '', phase: 'searching' }
 
       const localId = activeLocalId ?? uid()
-      const backendConvId = active?.conversationId ?? null
+      // Anonymous chat has no server-side transcript, so multi-turn context
+      // is whatever this browser still holds. Skip failed/in-flight bubbles —
+      // an error message's text is a stack of nonsense to feed a model.
+      const history: ChatTurn[] = (active?.messages ?? [])
+        .filter((m) => m.content && m.phase !== 'error' && m.phase !== 'searching')
+        .slice(-MAX_HISTORY_TURNS)
+        .map((m) => ({ role: m.role, content: m.content.slice(0, MAX_TURN_CHARS) }))
 
       setConversations((cs) => {
         const existing = cs.find((c) => c.localId === localId)
@@ -131,17 +143,14 @@ export function useChat() {
           )
         }
         return [
-          { localId, conversationId: null, title: titleFrom(q), createdAt: Date.now(), messages: [userMsg, replyMsg] },
+          { localId, title: titleFrom(q), createdAt: Date.now(), messages: [userMsg, replyMsg] },
           ...cs,
         ]
       })
       if (!activeLocalId) setActiveLocalId(localId)
 
       try {
-        const res = await api.chat(q, backendConvId)
-        setConversations((cs) =>
-          cs.map((c) => (c.localId === localId ? { ...c, conversationId: res.conversation_id } : c)),
-        )
+        const res = await api.chat(q, history)
         patch(localId, replyId, { phase: 'revealing', citations: res.citations ?? [] })
         reveal(localId, replyId, res.answer)
       } catch (err) {

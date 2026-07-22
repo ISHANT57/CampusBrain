@@ -1,23 +1,18 @@
-import { Navigate, NavLink, Outlet, Route, Routes } from "react-router-dom";
+import { Navigate, Outlet, Route, Routes } from "react-router-dom";
 
 import { useAuth } from "./hooks/useAuth";
+import AdminLogin from "./pages/AdminLogin";
 import Chat from "./pages/Chat";
-import Login from "./pages/Login";
-import Register from "./pages/Register";
 import Upload from "./pages/Upload";
 
-const UPLOAD_ROLES = ["faculty", "admin", "super_admin"];
+const ADMIN_ROLES = ["admin", "super_admin"];
 
-function Shell() {
+function AdminShell() {
   const { user, logout } = useAuth();
   return (
     <div className="shell">
       <header>
-        <span className="brand">CampusBrain AI</span>
-        <nav>
-          <NavLink to="/chat">Chat</NavLink>
-          {UPLOAD_ROLES.includes(user!.role) && <NavLink to="/upload">Upload</NavLink>}
-        </nav>
+        <span className="brand">CampusBrain Admin</span>
         <span className="user">
           {user!.email} <em>({user!.role})</em>
           <button className="link" onClick={logout}>
@@ -32,22 +27,28 @@ function Shell() {
   );
 }
 
-function ProtectedRoute() {
+// The real enforcement is server-side — every /documents and /search route
+// requires an admin token. This only decides what the browser bothers to
+// render, so someone poking at /admin gets the login page rather than a
+// screen full of 403s.
+function AdminRoute() {
   const { user, loading } = useAuth();
   if (loading) return <p className="center muted">Loading…</p>;
-  return user ? <Shell /> : <Navigate to="/login" replace />;
+  if (!user) return <Navigate to="/admin/login" replace />;
+  return ADMIN_ROLES.includes(user.role) ? <AdminShell /> : <Navigate to="/" replace />;
 }
 
 export default function App() {
   return (
     <Routes>
-      <Route path="/login" element={<Login />} />
-      <Route path="/register" element={<Register />} />
-      <Route element={<ProtectedRoute />}>
-        <Route path="/chat" element={<Chat />} />
-        <Route path="/upload" element={<Upload />} />
+      {/* Public: no token, no account, no redirect — a student lands here and
+          can ask immediately. */}
+      <Route path="/" element={<Chat />} />
+      <Route path="/admin/login" element={<AdminLogin />} />
+      <Route element={<AdminRoute />}>
+        <Route path="/admin" element={<Upload />} />
       </Route>
-      <Route path="*" element={<Navigate to="/chat" replace />} />
+      <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
 }

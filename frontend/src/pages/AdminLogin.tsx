@@ -3,7 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 
 import { useAuth } from "../hooks/useAuth";
 
-export default function Login() {
+export default function AdminLogin() {
   const { login } = useAuth();
   const navigate = useNavigate();
   const [orgId, setOrgId] = useState("1");
@@ -18,7 +18,7 @@ export default function Login() {
     setBusy(true);
     try {
       await login(Number(orgId), email, password);
-      navigate("/chat");
+      navigate("/admin");
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -29,8 +29,10 @@ export default function Login() {
   return (
     <div className="auth-page">
       <form className="card" onSubmit={onSubmit}>
-        <h1>CampusBrain AI</h1>
-        <p className="muted">Sign in to ask questions about your institution's documents.</p>
+        <h1>CampusBrain Admin</h1>
+        {/* No "create an account" link on purpose: accounts are created with
+            backend/scripts/create_admin.py, never through the browser. */}
+        <p className="muted">Staff sign-in for managing the knowledge base.</p>
 
         <label>Organization ID</label>
         <input value={orgId} onChange={(e) => setOrgId(e.target.value)} required />
@@ -50,7 +52,7 @@ export default function Login() {
 
         <button disabled={busy}>{busy ? "Signing in…" : "Sign in"}</button>
         <p className="muted">
-          No account? <Link to="/register">Register as a student</Link>
+          Looking for the chatbot? <Link to="/">Ask a question</Link>
         </p>
       </form>
     </div>

@@ -28,10 +28,9 @@ async function request(path: string, options: RequestInit = {}) {
   return res.json();
 }
 
-export const api = {
-  register: (org_id: number, email: string, password: string) =>
-    request("/auth/register", { method: "POST", body: JSON.stringify({ org_id, email, password }) }),
+export type ChatTurn = { role: "user" | "assistant"; content: string };
 
+export const api = {
   login: (org_id: number, email: string, password: string) =>
     request("/auth/login", { method: "POST", body: JSON.stringify({ org_id, email, password }) }),
 
@@ -46,9 +45,9 @@ export const api = {
 
   getDocument: (id: number) => request(`/documents/${id}`),
 
-  chat: (question: string, conversationId: number | null) =>
-    request("/chat", {
-      method: "POST",
-      body: JSON.stringify({ question, conversation_id: conversationId }),
-    }),
+  // Public — no token needed. The backend keeps no transcript for anonymous
+  // students, so prior turns travel with the question (the sidebar was
+  // already localStorage-only; this just forwards what it holds).
+  chat: (question: string, history: ChatTurn[]) =>
+    request("/chat", { method: "POST", body: JSON.stringify({ question, history }) }),
 };

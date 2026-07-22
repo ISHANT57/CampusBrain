@@ -44,7 +44,7 @@ export default function Upload() {
       <h2>Upload documents</h2>
       <p className="muted">
         PDF, Word (.doc/.docx), PowerPoint (.ppt/.pptx), Excel (.xls/.xlsx), CSV, Markdown, TXT,
-        JSON, HTML or XML. Max 100 MB. Only Faculty, Admin and Super Admin can upload.
+        JSON, HTML or XML. Max 100 MB.
       </p>
 
       <div

@@ -16,7 +16,6 @@ from fastapi.testclient import TestClient
 from app.core.database import SessionLocal
 from app.core.security import hash_password
 from app.main import app
-from app.models.conversation import Conversation
 from app.models.user import User, UserRole
 
 client = TestClient(app)
@@ -30,7 +29,7 @@ def _unique_email(prefix: str) -> str:
 
 
 def _make_user(role: UserRole) -> tuple[User, str]:
-    """Create a user directly (public registration can only make Students) and
+    """Create a user directly (there is no registration endpoint any more) and
     return the user plus a bearer token for it."""
     email = _unique_email(role.value)
     db = SessionLocal()
@@ -52,20 +51,15 @@ def _auth(token: str) -> dict:
     return {"Authorization": f"Bearer {token}"}
 
 
-def test_register_ignores_client_supplied_role():
-    """BUG 1 (privilege escalation): anyone could self-register as SUPER_ADMIN
-    by putting `role` in the request body."""
+def test_no_self_registration_endpoint():
+    """BUG 1 (privilege escalation) is now structural: there is no public way
+    to create an account at all, so there is no role to escalate. Accounts come
+    from scripts/create_admin.py only."""
     res = client.post(
         "/api/v1/auth/register",
-        json={
-            "org_id": ORG_ID,
-            "email": _unique_email("escalate"),
-            "password": "pass1234",
-            "role": "super_admin",
-        },
+        json={"org_id": ORG_ID, "email": _unique_email("escalate"), "password": "pass1234"},
     )
-    assert res.status_code == 201, res.text
-    assert res.json()["role"] == "student"
+    assert res.status_code == 404, res.text
 
 
 def test_upload_filename_cannot_escape_storage_prefix():
@@ -99,45 +93,45 @@ def test_protected_route_returns_401_not_403(headers):
     assert res.status_code == 401
 
 
-def test_user_cannot_read_another_users_conversation():
-    """BUG 4 (IDOR): org scoping alone let any user in the same organization
-    read another user's private chat by guessing its id."""
-    owner, owner_token = _make_user(UserRole.STUDENT)
-    _, other_token = _make_user(UserRole.STUDENT)
+def test_chat_is_public():
+    """BUG 4 (IDOR on another user's conversation) is gone with the transcript
+    itself: anonymous chat stores nothing server-side.
 
-    # Create the conversation directly so the test doesn't need an LLM call.
-    db = SessionLocal()
-    conversation = Conversation(org_id=ORG_ID, user_id=owner.id, title="private")
-    db.add(conversation)
-    db.commit()
-    db.refresh(conversation)
-    conversation_id = conversation.id
-    db.close()
-
-    # The owner can read it...
-    assert client.get(f"/api/v1/chat/{conversation_id}/messages", headers=_auth(owner_token)).status_code == 200
-
-    # ...another user in the SAME org cannot read it...
-    assert client.get(f"/api/v1/chat/{conversation_id}/messages", headers=_auth(other_token)).status_code == 404
-
-    # ...nor continue it.
-    hijack = client.post(
-        "/api/v1/chat",
-        headers=_auth(other_token),
-        json={"conversation_id": conversation_id, "question": "what did they ask?"},
-    )
-    assert hijack.status_code == 404
+    Sends a deliberately invalid body so this asserts reachability without
+    spending a real LLM call — 422 proves the request got as far as body
+    validation with no token at all. A 401 here would mean chat went back
+    behind auth and every student is locked out."""
+    res = client.post("/api/v1/chat", json={"question": ""})
+    assert res.status_code == 422, res.text
 
 
-def test_student_cannot_upload_documents():
-    """RBAC: uploading is restricted to Faculty/Admin/Super Admin."""
-    _, student_token = _make_user(UserRole.STUDENT)
+@pytest.mark.parametrize("role", [UserRole.STUDENT, UserRole.FACULTY])
+def test_non_admin_cannot_upload_documents(role):
+    """RBAC: uploading is restricted to Admin/Super Admin. Faculty is included
+    here because it used to be allowed — this is the regression guard."""
+    _, token = _make_user(role)
     res = client.post(
         "/api/v1/documents",
-        headers=_auth(student_token),
+        headers=_auth(token),
         files={"file": ("notes.txt", b"some notes", "text/plain")},
     )
     assert res.status_code == 403
+
+
+@pytest.mark.parametrize(
+    "method,path,kwargs",
+    [
+        pytest.param("post", "/api/v1/documents", {"files": {"file": ("n.txt", b"x", "text/plain")}}, id="upload"),
+        pytest.param("get", "/api/v1/documents/1", {}, id="get_document"),
+        pytest.param("post", "/api/v1/search", {"json": {"query": "fees"}}, id="search"),
+    ],
+)
+def test_knowledge_base_routes_reject_anonymous(method, path, kwargs):
+    """Students have no account, so every document-management route has to
+    turn away a request with no token — the chatbot being public must not
+    have made anything else public."""
+    res = getattr(client, method)(path, **kwargs)
+    assert res.status_code == 401, res.text
 
 
 def test_unsupported_file_type_is_rejected():

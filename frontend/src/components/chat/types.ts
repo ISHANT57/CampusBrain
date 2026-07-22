@@ -18,7 +18,6 @@ export type ChatMessage = {
 
 export type Conversation = {
   localId: string
-  conversationId: number | null
   title: string
   createdAt: number
   messages: ChatMessage[]

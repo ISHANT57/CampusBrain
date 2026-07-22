@@ -672,26 +672,33 @@ JWT tokens, bcrypt password hashing, role checks. Full detail in [section 10](#1
 | **Learning difficulty** | Easy for basic routing. |
 | **Our use case** | `frontend/src/App.tsx` — the `ProtectedRoute` component. |
 
-### Styling — plain CSS, with a Tailwind migration in progress
+### Styling — two systems coexist
 
-⚠️ **This area is mid-change. Read carefully before touching it.**
+⚠️ **The chat screen was rebuilt with Tailwind after the rest of the app was written. Both styling systems are live at once.** This is the single most confusing thing about the frontend, so read this before touching it.
 
-**What the running app currently uses:** one hand-written stylesheet, `frontend/src/index.css`, about 250 lines. Every screen in `frontend/src/pages/` renders using its class names.
-
-**Why it was built that way:** the MVP has four screens. Tailwind plus a component library would have added a build step, a config file and dozens of packages to style four screens — and every dependency added during this project caused at least one installation failure (see [section 24](#24-challenges-we-faced)).
-
-**What has been added since, and is NOT yet wired in:**
-
-| Added | Status |
+| Screen | Styling |
 |---|---|
-| `tailwindcss` v4 + `@tailwindcss/vite`, configured in `vite.config.ts` | ✅ Build supports it |
-| `@` path alias (`@/…` → `src/…`) in `vite.config.ts` and `tsconfig.json` | ✅ Working |
-| `@radix-ui/react-dialog`, `react-slot`, `cmdk`, `framer-motion`, `lucide-react`, `clsx`, `class-variance-authority`, `tailwind-merge` | ✅ Installed |
-| `frontend/src/components/chat/` — `Message.tsx`, `ThemeToggle.tsx`, `useChat.ts`, `types.ts`, `chat-theme.css`, plus `ui/` and `lib/` folders | ⚠️ **Exists but unused** |
+| Login, Register, Upload | Hand-written CSS in `src/index.css` |
+| **Chat** | **Tailwind v4 + Radix UI components in `src/components/chat/`** |
 
-⚠️ **The critical point:** `pages/Chat.tsx` still imports nothing from `components/chat/`, and `index.css` is unchanged. **The new components are not rendered by the running application.** Both styling systems are present in the repository at once.
+**The original approach (still used by 3 of 4 screens):** one hand-written stylesheet, about 250 lines. Chosen because four simple screens did not justify a build step and dozens of packages — and every dependency added during this project caused at least one installation failure (see [section 24](#24-challenges-we-faced)).
 
-**If you are picking this up:** the migration is incomplete. Either finish it — rewrite the pages to use the new components and delete the superseded CSS — or remove the unused components and dependencies. Leaving two styling systems half-installed is the worst of both: extra build weight with no benefit, and genuine confusion about which code is live.
+**What the chat rebuild added:**
+
+| Package | Purpose |
+|---|---|
+| `tailwindcss` v4 + `@tailwindcss/vite` | Utility-class styling |
+| `@radix-ui/react-dialog`, `react-slot` | Accessible dialog primitives |
+| `cmdk` | Command palette (Ctrl/Cmd + K) |
+| `framer-motion` | Animation |
+| `lucide-react` | Icons |
+| `clsx`, `tailwind-merge`, `class-variance-authority` | Conditional and variant class handling |
+
+Also added: an `@` path alias (`@/…` → `src/…`) in `vite.config.ts` and `tsconfig.json`.
+
+**Verified:** builds and runs with zero errors.
+
+⚠️ **If you are picking this up:** finish the migration or revert it. Two styling systems means new work has no obvious home, and a change to shared visual language must be made twice. The chat screen is the strongest argument for finishing it — it is genuinely better than the plain-CSS screens.
 
 ## 5.2 Backend technologies
 
@@ -1090,22 +1097,25 @@ frontend/
     ├── index.css         All styling used by the LIVE app
     ├── api/client.ts     Every backend call lives here
     ├── hooks/useAuth.tsx Login state shared across the app
-    ├── components/chat/  ⚠️ NEW, NOT YET WIRED IN — see §5.1
-    │   ├── Message.tsx        Tailwind/Radix message component
+    ├── components/chat/  Tailwind + Radix UI — used ONLY by the Chat screen
+    │   ├── Composer.tsx       The input box (submit, stop)
+    │   ├── Message.tsx        One message + its citations
+    │   ├── Sidebar.tsx        Conversation list
+    │   ├── CommandPalette.tsx Ctrl/Cmd + K launcher
+    │   ├── ShortcutsDialog.tsx Keyboard help ( ? )
+    │   ├── EmptyState.tsx     Suggested questions on a blank chat
     │   ├── ThemeToggle.tsx    Light/dark switch
-    │   ├── useChat.ts         Chat state hook
+    │   ├── useChat.ts         Chat state + calls api.chat()
     │   ├── types.ts           Shared types
     │   ├── chat-theme.css     Theme variables
-    │   ├── ui/                Component primitives
-    │   └── lib/               Helpers (e.g. class merging)
-    └── pages/            ← these are what actually render today
-        ├── Login.tsx
-        ├── Register.tsx
-        ├── Chat.tsx      The main screen (still plain CSS)
-        └── Upload.tsx
+    │   ├── ui/                button.tsx, primitives.tsx
+    │   └── lib/utils.ts       Class merging, media query, platform key
+    └── pages/
+        ├── Login.tsx     plain CSS
+        ├── Register.tsx  plain CSS
+        ├── Upload.tsx    plain CSS
+        └── Chat.tsx      Tailwind — composes components/chat/
 ```
-
-⚠️ `components/chat/` is a half-finished redesign. Nothing in `pages/` imports it yet.
 
 **Why `api/client.ts` exists as one file:** every request needs the auth token attached and errors handled the same way. Centralising it means a change to error handling happens once, not in eight components.
 

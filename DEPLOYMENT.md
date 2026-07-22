@@ -119,7 +119,7 @@ place.
 
 **`frontend/vercel.json` (already added) — required for client-side routing.**
 Vercel's own docs are explicit that a Vite SPA's deep links ("won't work out
-of the box") without this: visiting `/login` or `/chat` directly (or
+of the box") without this: visiting `/admin/login` or `/admin` directly (or
 refreshing on one) has no matching physical file in the build output, so
 Vercel's static host 404s instead of falling back to `index.html`, where
 React Router would actually handle the route. The file:
@@ -140,7 +140,21 @@ Once both are deployed:
 3. Confirm storage connectivity specifically: `curl https://your-backend.onrender.com/health/storage`
    → `{"status":"ok","detail":"reachable"}`. If it errors, the bucket
    likely isn't created yet — see the Supabase Dashboard steps below.
-4. Open the Vercel URL, log in, try a chat and an upload end to end.
+4. Create the first admin — there is no sign-up page, by design. Add two more
+   environment variables in Render and redeploy:
+   ```
+   ADMIN_EMAIL=you@college.edu
+   ADMIN_PASSWORD=...            # minimum 12 characters
+   ```
+   `scripts/render-start.sh` runs `scripts/create_admin.py` on every boot when
+   `ADMIN_EMAIL` is set — creating the account, or resetting its password to
+   match. That's the free-tier path: the Shell tab and Pre-Deploy Command are
+   both paid-only, so there is no way to run a one-off command by hand.
+   Delete both variables once you've signed in successfully; the account
+   stays, and the password stops living in the dashboard. Re-add them if you
+   ever need to reset it.
+5. Open the Vercel URL — the chatbot should load with no login at all. Ask a
+   question, then sign in at `/admin/login` and upload a document.
 
 ## Manual steps in the Supabase Dashboard (not something code can do for you)
 

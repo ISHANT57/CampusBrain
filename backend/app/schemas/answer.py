@@ -11,11 +11,3 @@ class Citation(BaseModel):
     excerpt: str
 
 
-class AskRequest(BaseModel):
-    question: str
-    top_k: int = 5
-
-
-class AnswerResponse(BaseModel):
-    answer: str
-    citations: list[Citation]

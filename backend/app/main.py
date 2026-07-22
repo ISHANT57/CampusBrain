@@ -6,7 +6,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
-from app.api.v1.ask import router as ask_router
 from app.api.v1.auth import router as auth_router
 from app.api.v1.chat import router as chat_router
 from app.api.v1.documents import router as documents_router
@@ -21,7 +20,6 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.include_router(auth_router, prefix="/api/v1")
 app.include_router(documents_router, prefix="/api/v1")
 app.include_router(search_router, prefix="/api/v1")
-app.include_router(ask_router, prefix="/api/v1")
 app.include_router(chat_router, prefix="/api/v1")
 
 # CORS_ALLOWED_ORIGINS defaults to "*" for local dev (Vite dev server,

@@ -4,7 +4,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPExcepti
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.core.dependencies import get_current_user, require_role
+from app.core.dependencies import require_role
 from app.models.user import User, UserRole
 from app.repositories.document_repository import DocumentRepository
 from app.schemas.document import DocumentRead
@@ -19,7 +19,7 @@ async def upload(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     collection_id: int | None = Form(None),
-    current_user: User = Depends(require_role(UserRole.FACULTY, UserRole.ADMIN, UserRole.SUPER_ADMIN)),
+    current_user: User = Depends(require_role(UserRole.ADMIN, UserRole.SUPER_ADMIN)),
     db: Session = Depends(get_db),
 ):
     content = await file.read()
@@ -48,7 +48,7 @@ async def upload(
 @router.get("/{document_id}", response_model=DocumentRead)
 def get_document(
     document_id: int,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_role(UserRole.ADMIN, UserRole.SUPER_ADMIN)),
     db: Session = Depends(get_db),
 ):
     document = DocumentRepository(db, current_user.org_id).get(document_id)
