@@ -4,23 +4,25 @@ import { cva, type VariantProps } from 'class-variance-authority'
 import { Loader2 } from 'lucide-react'
 import { cn } from '../lib/utils'
 
+/* Heights are on an 8px rhythm (32/40/48) with one 36px step for dense
+   toolbars. Radius comes from the token ramp, never an arbitrary value. */
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap font-medium transition-[background-color,border-color,color,box-shadow,transform] duration-150 disabled:pointer-events-none disabled:opacity-40 [&_svg]:pointer-events-none [&_svg]:shrink-0 active:scale-[0.985] motion-reduce:active:scale-100 select-none",
+  'inline-flex items-center justify-center gap-2 whitespace-nowrap font-medium select-none transition-[background-color,border-color,color,box-shadow,transform] duration-150 ease-out disabled:pointer-events-none disabled:opacity-40 [&_svg]:pointer-events-none [&_svg]:shrink-0 active:scale-[0.97] motion-reduce:active:scale-100',
   {
     variants: {
       variant: {
-        primary: 'bg-ink text-canvas hover:bg-ink/90 shadow-[0_1px_2px_rgb(0_0_0/0.08)]',
-        accent: 'bg-accent text-accent-fg hover:brightness-110',
-        outline: 'border border-border bg-surface text-ink hover:bg-sunken hover:border-border-strong',
-        ghost: 'text-muted hover:bg-sunken hover:text-ink',
-        subtle: 'bg-sunken text-ink hover:bg-border/60',
+        accent: 'bg-accent text-accent-fg hover:brightness-110 shadow-[var(--shadow-card)]',
+        primary: 'bg-ink text-canvas hover:opacity-90 shadow-[var(--shadow-card)]',
+        outline: 'border border-border bg-surface text-ink hover:bg-hover hover:border-border-strong',
+        ghost: 'text-muted hover:bg-hover hover:text-ink',
+        subtle: 'bg-sunken text-ink hover:bg-hover',
       },
       size: {
-        sm: 'h-8 px-3 text-[13px] rounded-[8px] [&_svg]:size-3.5',
-        md: 'h-9 px-3.5 text-[14px] rounded-[10px] [&_svg]:size-4',
-        lg: 'h-11 px-5 text-[15px] rounded-[12px] [&_svg]:size-[18px]',
-        icon: 'size-9 rounded-[10px] [&_svg]:size-[18px]',
-        'icon-sm': 'size-8 rounded-[8px] [&_svg]:size-4',
+        sm: 'h-8 px-3 text-[13px] rounded-[var(--radius-control)] [&_svg]:size-4',
+        md: 'h-9 px-3.5 text-[13.5px] rounded-[var(--radius-control)] [&_svg]:size-4',
+        lg: 'h-12 px-5 text-[15px] rounded-[var(--radius-card)] [&_svg]:size-[18px]',
+        icon: 'size-9 rounded-[var(--radius-control)] [&_svg]:size-[18px]',
+        'icon-sm': 'size-8 rounded-[var(--radius-control)] [&_svg]:size-4',
       },
     },
     defaultVariants: { variant: 'outline', size: 'md' },
@@ -34,9 +36,8 @@ export interface ButtonProps
   loading?: boolean
 }
 
-// asChild is never combined with loading anywhere in this app — Slot needs
-// exactly one child, and a spinner would break that. Not guarded for, since
-// nothing today calls Button asChild with loading=true.
+// asChild is never combined with loading — Slot needs exactly one child and a
+// spinner would break that. Nothing in the app does it today.
 export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(function Button(
   { className, variant, size, asChild = false, loading = false, disabled, children, ...props },
   ref,

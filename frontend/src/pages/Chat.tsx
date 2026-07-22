@@ -1,17 +1,20 @@
 import { useEffect, useRef, useState } from 'react'
-import { ArrowDown, PanelLeft, Search } from 'lucide-react'
+import { ArrowDown } from 'lucide-react'
 import { Button } from '../components/chat/ui/button'
-import { Kbd, Tooltip } from '../components/chat/ui/primitives'
 import { Composer, type ComposerHandle } from '../components/chat/Composer'
+import { Header } from '../components/chat/Header'
 import { Message } from '../components/chat/Message'
 import { EmptyState } from '../components/chat/EmptyState'
 import { Sidebar } from '../components/chat/Sidebar'
 import { CommandPalette } from '../components/chat/CommandPalette'
 import { ShortcutsDialog } from '../components/chat/ShortcutsDialog'
-import { ThemeToggle } from '../components/chat/ThemeToggle'
 import { useChat } from '../components/chat/useChat'
-import { mod, useMediaQuery } from '../components/chat/lib/utils'
+import { useMediaQuery } from '../components/chat/lib/utils'
 import { useTheme } from '../hooks/useTheme'
+
+// One reading column, shared by the thread and the composer so the two stay
+// optically aligned. ~820px keeps answer lines near the 75-character mark.
+const COLUMN = 'mx-auto w-full max-w-[820px] px-5 sm:px-8'
 
 const isTyping = (el: Element | null) =>
   !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || (el as HTMLElement).isContentEditable)
@@ -100,6 +103,8 @@ export default function Chat({ portalTarget }: { portalTarget: HTMLElement | nul
     setPinned(true)
   }
 
+  const empty = chat.messages.length === 0
+
   return (
     <div className="flex min-h-0 flex-1">
       <Sidebar
@@ -117,60 +122,70 @@ export default function Chat({ portalTarget }: { portalTarget: HTMLElement | nul
       />
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex h-12 shrink-0 items-center gap-2 border-b border-border px-3">
-          {!sidebarOpen && (
-            <Tooltip label={<>Show sidebar <Kbd>{mod} B</Kbd></>}>
-              <Button variant="ghost" size="icon-sm" onClick={() => setSidebarOpen(true)} aria-label="Show sidebar">
-                <PanelLeft />
-              </Button>
-            </Tooltip>
-          )}
-          <h1 className="min-w-0 truncate px-1 text-[13.5px] font-medium text-ink">
-            {chat.active?.title ?? 'New conversation'}
-          </h1>
-          <div className="ml-auto flex items-center gap-1">
-            <Button variant="ghost" size="sm" onClick={() => setPaletteOpen(true)} className="gap-2">
-              <Search />
-              <span className="hidden sm:inline">Search</span>
-              <Kbd className="hidden sm:inline-flex">{mod} K</Kbd>
-            </Button>
-            <ThemeToggle dark={dark} toggle={toggleTheme} />
-          </div>
-        </header>
+        <Header
+          title={chat.active?.title ?? 'New conversation'}
+          subtitle="Grounded in Sitare University documents"
+          sidebarOpen={sidebarOpen}
+          onOpenSidebar={() => setSidebarOpen(true)}
+          onOpenSearch={() => setPaletteOpen(true)}
+          dark={dark}
+          onToggleTheme={toggleTheme}
+        />
 
         <div ref={scroller} onScroll={onScroll} className="relative flex-1 overflow-y-auto">
-          {chat.messages.length === 0 ? (
+          {empty ? (
             <EmptyState onAsk={chat.send} />
           ) : (
-            <div className="mx-auto max-w-[720px] px-5 py-8">
-              <div className="flex flex-col gap-9">
+            <div className={`${COLUMN} py-8`}>
+              <div className="mb-8 flex justify-center">
+                <span className="rounded-full border border-border bg-surface px-3.5 py-1.5 text-[12px] text-muted">
+                  Answers are drawn from Sitare University's documents
+                </span>
+              </div>
+
+              {/* 40px between turns — enough to separate speakers without the
+                  thread breaking into isolated blocks. */}
+              <div className="flex flex-col gap-10">
                 {chat.messages.map((m) => (
                   <Message key={m.id} message={m} onRetry={retry} />
                 ))}
               </div>
-              <div className="h-8" />
+              <div className="h-4" />
             </div>
           )}
         </div>
 
-        <div className="relative shrink-0 px-5 pb-5 pt-1">
-          {!pinned && chat.messages.length > 0 && (
-            <div className="absolute -top-11 left-1/2 z-10 -translate-x-1/2">
+        <div className="relative shrink-0">
+          {/* Fades the thread out behind the composer so messages dissolve
+              into it rather than colliding with a hard edge. */}
+          <div
+            className="pointer-events-none absolute inset-x-0 -top-8 h-8 bg-gradient-to-t from-canvas to-transparent"
+            aria-hidden="true"
+          />
+
+          {!pinned && !empty && (
+            <div className="absolute -top-14 left-1/2 z-10 -translate-x-1/2">
               <Button
                 variant="outline"
-                size="icon-sm"
+                size="icon"
                 onClick={toBottom}
                 aria-label="Scroll to latest"
-                className="rounded-full shadow-[var(--shadow-card)]"
+                className="rounded-full shadow-[var(--shadow-float)]"
               >
                 <ArrowDown />
               </Button>
             </div>
           )}
 
-          <div className="mx-auto max-w-[720px]">
-            <Composer ref={composer} onSubmit={chat.send} onStop={chat.stop} streaming={chat.streaming} />
-            <p className="mt-2.5 text-center text-[11px] text-faint">
+          <div className={`${COLUMN} pb-5 pt-1`}>
+            <Composer
+              ref={composer}
+              onSubmit={chat.send}
+              onStop={chat.stop}
+              streaming={chat.streaming}
+              placeholder={empty ? 'Ask anything about Sitare University…' : 'Ask a follow-up question…'}
+            />
+            <p className="mt-3 text-center text-[11.5px] text-faint">
               Answers cite uploaded documents — verify anything critical against the source.
             </p>
           </div>

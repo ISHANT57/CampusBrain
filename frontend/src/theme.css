@@ -1,74 +1,86 @@
-/* App-wide design system. Originally scoped to the Chat page only, back when
-   admin pages had their own separate hardcoded-hex CSS (index.css) — that
-   system is gone, so this now covers the whole app.
+/* App-wide design system.
 
-   Deliberately import theme+utilities WITHOUT Preflight (Tailwind's reset) —
-   Preflight strips default button/input styling globally, and every control
-   here is styled explicitly anyway. Tokens live under .cb-scope (not :root),
-   not because of a naming collision any more, but because the portal-target
-   trick (see App.tsx) needs one real, findable DOM node that Radix/cmdk
-   dialogs can portal into and still see every CSS variable. */
-@import 'tailwindcss/theme.css';
-@import 'tailwindcss/utilities.css';
+   Full Tailwind import — theme + preflight + utilities. Preflight was
+   deliberately skipped here for a long time because the admin pages ran on
+   their own plain-CSS rules that its reset would have flattened. Those pages
+   are Tailwind now, so the reset is back, and it fixes three things that were
+   visibly wrong: <ul> conversation rows in the sidebar rendered with default
+   disc bullets and a hanging indent, inline <svg> icons sat on the text
+   baseline instead of centering, and every element relied on a hand-rolled
+   reset below that only covered what someone remembered to list. */
+@import 'tailwindcss';
 
 @custom-variant dark (&:where(.cb-scope.dark, .cb-scope.dark *));
 
+/* ---------------------------------------------------------------------------
+   Tokens. Light is designed first and on its own terms (a warm-neutral gray
+   ramp), not as an inversion of dark. Dark is layered — canvas < sunken <
+   surface < raised — so panels read as stacked planes rather than flat black.
+   --------------------------------------------------------------------------- */
 .cb-scope {
-  --canvas: #faf9f7;
-  --surface: #ffffff;
-  --sunken: #f2f1ed;
-  --border: #e5e3dd;
-  --border-strong: #d5d2c9;
-  --ink: #1a1917;
-  --muted: #6b6963;
-  --faint: #94928b;
-  --accent: #0d6b6f;
+  --canvas: #fafafa; /* page — never pure white */
+  --sunken: #f5f5f5; /* sidebar, inset wells */
+  --surface: #ffffff; /* cards, composer, popovers */
+  --raised: #ffffff;
+  --hover: #f3f4f6;
+  --border: #e5e7eb;
+  --border-strong: #d1d5db;
+  --ink: #111827;
+  --muted: #6b7280;
+  --faint: #9ca3af;
+  --accent: #2563eb;
   --accent-fg: #ffffff;
-  --accent-soft: #e2efee;
-  --clay: #d97757;
-  --ring: #0d6b6f;
-  --shadow-card: 0 1px 2px rgb(26 25 23 / 0.04), 0 8px 24px -12px rgb(26 25 23 / 0.12);
+  --accent-soft: #eff6ff;
+  --accent-border: #bfdbfe;
+  --ring: #2563eb;
 
-  /* Status tokens. --error aliases --clay rather than introducing a second
-     red — this app's warm terracotta already reads as "error" everywhere
-     it's used (Message's error card, the sidebar's delete-hover), so a
-     generic red would just be a second, competing error color. */
   --success: #15803d;
-  --success-soft: #e7f5eb;
+  --success-soft: #ecfdf3;
   --warning: #b45309;
-  --warning-soft: #fdf1e0;
-  --error: var(--clay);
-  --error-soft: #f8ece5;
+  --warning-soft: #fffbeb;
+  --error: #dc2626;
+  --error-soft: #fef2f2;
+
+  /* Two elevations only. Cards sit flat-ish; only genuinely floating things
+     (composer, dialogs, tooltips) get the larger one. */
+  --shadow-card: 0 1px 2px rgb(16 24 40 / 0.04), 0 1px 3px rgb(16 24 40 / 0.06);
+  --shadow-float: 0 4px 12px -2px rgb(16 24 40 / 0.08), 0 16px 32px -12px rgb(16 24 40 / 0.16);
 }
 
 .cb-scope.dark {
-  --canvas: #0e0e0d;
-  --surface: #171716;
-  --sunken: #1f1f1d;
-  --border: #2b2b28;
-  --border-strong: #3a3a36;
-  --ink: #f4f3f0;
-  --muted: #a6a39b;
-  --faint: #75736c;
-  --accent: #45c4bd;
-  --accent-fg: #04201f;
-  --accent-soft: #12312f;
-  --clay: #e08a6c;
-  --ring: #45c4bd;
-  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.4), 0 8px 24px -12px rgb(0 0 0 / 0.6);
+  --canvas: #0c0e12;
+  --sunken: #121519;
+  --surface: #171b21;
+  --raised: #1c2128;
+  --hover: #1f242c;
+  --border: #262b33;
+  --border-strong: #343b45;
+  --ink: #f3f4f6;
+  --muted: #9ca3af;
+  --faint: #6b7280;
+  --accent: #3b82f6;
+  --accent-fg: #ffffff;
+  --accent-soft: #172554;
+  --accent-border: #1e3a8a;
+  --ring: #3b82f6;
 
   --success: #4ade80;
-  --success-soft: #12291c;
+  --success-soft: #0f2418;
   --warning: #fbbf24;
-  --warning-soft: #332508;
-  --error: var(--clay);
-  --error-soft: #34211a;
+  --warning-soft: #2b1f06;
+  --error: #f87171;
+  --error-soft: #2a1416;
+
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.32), 0 1px 3px rgb(0 0 0 / 0.4);
+  --shadow-float: 0 4px 12px -2px rgb(0 0 0 / 0.5), 0 16px 32px -12px rgb(0 0 0 / 0.7);
 }
 
 @theme inline {
   --color-canvas: var(--canvas);
-  --color-surface: var(--surface);
   --color-sunken: var(--sunken);
+  --color-surface: var(--surface);
+  --color-raised: var(--raised);
+  --color-hover: var(--hover);
   --color-border: var(--border);
   --color-border-strong: var(--border-strong);
   --color-ink: var(--ink);
@@ -77,9 +89,8 @@
   --color-accent: var(--accent);
   --color-accent-fg: var(--accent-fg);
   --color-accent-soft: var(--accent-soft);
-  --color-clay: var(--clay);
+  --color-accent-border: var(--accent-border);
   --color-ring: var(--ring);
-
   --color-success: var(--success);
   --color-success-soft: var(--success-soft);
   --color-warning: var(--warning);
@@ -87,13 +98,18 @@
   --color-error: var(--error);
   --color-error-soft: var(--error-soft);
 
+  /* Radius ramp — four steps, nothing arbitrary. control < card < panel < pill */
+  --radius-control: 8px;
+  --radius-card: 12px;
+  --radius-panel: 16px;
+  --radius-composer: 24px;
+
   --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
-  --font-serif: 'Source Serif 4', Charter, Georgia, serif;
   --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
 
   --animate-caret: caret 1.1s steps(2) infinite;
   --animate-shimmer: shimmer 1.6s ease-in-out infinite;
-  --animate-rise: rise 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+  --animate-rise: rise 0.24s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 @keyframes caret {
@@ -109,16 +125,16 @@
 @keyframes shimmer {
   0%,
   100% {
-    opacity: 0.35;
+    opacity: 0.4;
   }
   50% {
-    opacity: 0.8;
+    opacity: 0.85;
   }
 }
 @keyframes rise {
   from {
     opacity: 0;
-    transform: translateY(8px);
+    transform: translateY(6px);
   }
   to {
     opacity: 1;
@@ -126,103 +142,145 @@
   }
 }
 
-/* Manual reset for the elements Preflight would normally cover.
+/* ---------------------------------------------------------------------------
+   Base. Everything below goes in @layer base / @layer components — NOT the
+   implicit outer layer. Unlayered rules outrank every @layer including
+   Tailwind's utilities, so an unlayered `:focus-visible { outline: … }` beat
+   the `outline-none` sitting on the composer textarea, the sidebar search,
+   the command palette input and the admin login fields. Each of those draws
+   its own focus treatment on a parent wrapper, so they were rendering a
+   second, offset outline inside the first. Layering restores the normal
+   "utility wins" order and fixes all of them at once.
 
-   background/color reference the RAW --canvas/--ink vars, not the
-   --color-canvas/--color-ink aliases from @theme inline above. Tailwind's
-   "inline" mode doesn't emit those aliases as real, inheritable runtime
-   custom properties — it only substitutes them inline into generated
-   utility classes (.text-ink becomes `color: var(--ink)` in the actual
-   CSS, never `color: var(--color-ink)`). Using the alias here previously
-   left both properties silently unresolved (background: transparent,
-   color: initial/black) — masked for a long time by index.css's own
-   unrelated `body { background: var(--bg) }`, which painted an opaque
-   dark backdrop behind everything. Once that legacy rule was removed,
-   the page reverted to a plain white background everywhere nothing set
-   an explicit Tailwind bg-* utility. */
-.cb-scope {
-  background: var(--canvas);
-  color: var(--ink);
-  font-family: var(--font-sans);
-  -webkit-font-smoothing: antialiased;
-  /* Absolutely-positioned, centered content (the CSS-only Tooltip, mainly)
-     stays invisible at rest but still contributes to scrollable overflow —
-     near a screen edge on mobile that's enough to make the whole page
-     horizontally scrollable. Contained once at the app boundary rather than
-     constraining every tooltip caller individually. */
-  overflow-x: clip;
-}
-.cb-scope *,
-.cb-scope *::before,
-.cb-scope *::after {
-  box-sizing: border-box;
-}
-.cb-scope button,
-.cb-scope input,
-.cb-scope textarea {
-  font: inherit;
-  color: inherit;
-  background: none;
-  border: none;
-  border-radius: 0;
-  padding: 0;
-  appearance: none;
-}
-.cb-scope button {
-  cursor: pointer;
-}
-.cb-scope a {
-  color: inherit;
-  text-decoration: none;
-}
-/* Every var() below this line uses the raw --ink/--muted/--border/etc.
-   variable, never the --color-* alias — see the comment on .cb-scope's own
-   background/color above for why the alias silently resolves to nothing. */
-.cb-scope :focus-visible {
-  outline: 2px solid var(--ring);
-  outline-offset: 2px;
-  border-radius: 4px;
-}
-.cb-scope ::selection {
-  background: var(--accent-soft);
-  color: var(--ink);
+   Raw --ink/--canvas here, never the --color-* aliases: @theme inline
+   substitutes those into generated utility classes only, so they don't exist
+   as inheritable runtime custom properties and silently resolve to nothing.
+   --------------------------------------------------------------------------- */
+@layer base {
+  .cb-scope {
+    background: var(--canvas);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    /* Invisible absolutely-positioned tooltips still contribute scroll width;
+       near a screen edge on mobile that alone made the page scroll sideways. */
+    overflow-x: clip;
+  }
+
+  .cb-scope :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+  .cb-scope ::selection {
+    background: var(--accent-soft);
+    color: var(--ink);
+  }
+
+  /* Scrollbars, themed. Default chrome-gray tracks are the single loudest
+     giveaway that a dark UI wasn't designed end to end. */
+  .cb-scope * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-strong) transparent;
+  }
+  .cb-scope *::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  .cb-scope *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .cb-scope *::-webkit-scrollbar-thumb {
+    background: var(--border-strong);
+    border: 3px solid transparent;
+    background-clip: content-box;
+    border-radius: 999px;
+  }
+  .cb-scope *::-webkit-scrollbar-thumb:hover {
+    background: var(--faint);
+    background-clip: content-box;
+  }
 }
 
-.cb-scope .eyebrow {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  line-height: 1.5;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--muted);
+/* Metadata / section labels — the one place small-caps mono is used. */
+@layer components {
+  .cb-scope .eyebrow {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    line-height: 1.45;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--faint);
+  }
 }
 
-.cb-scope .prose-answer {
-  font-size: 15px;
-  line-height: 1.65;
-}
-.cb-scope .prose-answer p + p {
-  margin-top: 1em;
-}
-.cb-scope .prose-answer strong {
-  font-weight: 600;
-}
-.cb-scope .prose-answer code {
-  font-family: var(--font-mono);
-  font-size: 0.86em;
-  background: var(--sunken);
-  border: 1px solid var(--border);
-  border-radius: 5px;
-  padding: 0.1em 0.35em;
-}
+@layer components {
+  /* ---------------------------------------------------------------------------
+     Answer prose. Preflight strips list markers and heading sizes, so every
+     element the answer renderer can emit is restyled deliberately here.
+     --------------------------------------------------------------------------- */
+  .cb-scope .prose-answer {
+    font-size: 15.5px;
+    line-height: 1.7;
+    color: var(--ink);
+  }
+  .cb-scope .prose-answer > * + * {
+    margin-top: 16px;
+  }
+  .cb-scope .prose-answer strong {
+    font-weight: 600;
+    color: var(--ink);
+  }
+  .cb-scope .prose-answer ul,
+  .cb-scope .prose-answer ol {
+    padding-left: 24px;
+  }
+  .cb-scope .prose-answer ul {
+    list-style: disc;
+  }
+  .cb-scope .prose-answer ol {
+    list-style: decimal;
+  }
+  .cb-scope .prose-answer li + li {
+    margin-top: 6px;
+  }
+  .cb-scope .prose-answer li::marker {
+    color: var(--faint);
+  }
+  .cb-scope .prose-answer code {
+    font-family: var(--font-mono);
+    font-size: 0.86em;
+    background: var(--sunken);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.1em 0.36em;
+  }
+  .cb-scope .prose-answer pre {
+    background: var(--sunken);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-card);
+    padding: 16px;
+    overflow-x: auto;
+    font-size: 13px;
+    line-height: 1.65;
+  }
+  /* The <pre> already draws the frame — the nested <code> must not draw a
+     second one inside it. */
+  .cb-scope .prose-answer pre code {
+    background: none;
+    border: 0;
+    padding: 0;
+    font-size: inherit;
+  }
 
-.cb-scope [cmdk-group-heading] {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--muted);
-  padding: 10px 10px 4px;
+  .cb-scope [cmdk-group-heading] {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--faint);
+    padding: 12px 12px 4px;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -1,16 +1,17 @@
 import { memo, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Check, ChevronDown, Copy, FileText, RotateCcw, Search } from 'lucide-react'
+import { Check, Copy, RotateCcw } from 'lucide-react'
 import { Button } from './ui/button'
-import { Alert, Skeleton, Tooltip } from './ui/primitives'
+import { AnswerSkeleton, Avatar, ErrorCard, Tooltip } from './ui/primitives'
+import { SourceRail } from './SourceCard'
 import { cn } from './lib/utils'
 import type { ChatMessage, Citation } from './types'
 
 const ease = [0.16, 1, 0.3, 1] as const
 
-/* Inline markdown-lite: **bold**, *italic*, `code`, and [n] citation
-   markers — the four constructs the backend prompt actually produces.
-   A full markdown parser would be overkill for that. */
+/* Inline markdown-lite: **bold**, *italic*, `code`, and [n] citation markers
+   — the constructs the backend prompt actually produces. A full markdown
+   parser would be overkill for that. */
 const INLINE = /(\*\*[^*]+\*\*|\*[^*\s][^*]*\*|`[^`]+`|\[\d+\])/g
 
 function Inline({ text, citations }: { text: string; citations?: Citation[] }) {
@@ -39,7 +40,7 @@ function CitationChip({ src }: { src: Citation }) {
     <Tooltip
       side="top"
       label={
-        <span className="max-w-[240px] truncate text-left">
+        <span className="block max-w-[240px] truncate text-left">
           {src.filename} · p.{src.page_number}
         </span>
       }
@@ -48,7 +49,9 @@ function CitationChip({ src }: { src: Citation }) {
       <a
         href={`#source-${src.index}`}
         aria-label={`Source ${src.index}: ${src.filename}, page ${src.page_number}`}
-        className="mx-0.5 inline-flex h-[17px] min-w-[17px] translate-y-[-1px] items-center justify-center rounded-[5px] border border-border bg-sunken px-[5px] align-middle font-mono text-[10px] font-medium text-muted no-underline transition-colors hover:border-accent hover:bg-accent-soft hover:text-accent"
+        /* Left margin only. A right margin left a visible gap before the
+           punctuation that almost always follows a citation ("… student 1 ."). */
+        className="ml-0.5 inline-flex h-[18px] min-w-[18px] -translate-y-px items-center justify-center rounded-[6px] border border-border bg-sunken px-[5px] align-middle font-mono text-[10px] font-medium text-muted no-underline transition-colors duration-150 hover:border-accent-border hover:bg-accent-soft hover:text-accent"
       >
         {src.index}
       </a>
@@ -56,105 +59,74 @@ function CitationChip({ src }: { src: Citation }) {
   )
 }
 
+const BULLET = /^\s*[-*]\s+/
+const NUMBERED = /^\s*\d+[.)]\s+/
+const MARKER = /^\s*(?:[-*]|\d+[.)])\s+/
+
+type Run = { kind: 'p' | 'ul' | 'ol'; lines: string[] }
+
+/* Splits one block into consecutive runs of the same kind, so a paragraph and
+   the list that follows it inside the same block each render correctly. */
+function groupLines(block: string): Run[] {
+  const runs: Run[] = []
+  for (const line of block.split('\n')) {
+    if (!line.trim()) continue
+    const kind: Run['kind'] = BULLET.test(line) ? 'ul' : NUMBERED.test(line) ? 'ol' : 'p'
+    const last = runs[runs.length - 1]
+    if (last && last.kind === kind) last.lines.push(line)
+    else runs.push({ kind, lines: [line] })
+  }
+  return runs
+}
+
 function Blocks({ text, citations }: { text: string; citations?: Citation[] }) {
+  // Split on fenced code first so a ``` block's blank lines don't get chopped
+  // into separate paragraphs by the double-newline split below.
+  const segments = text.split(/(```[\s\S]*?```)/g)
+
   return (
     <>
-      {text.split('\n\n').map((block, bi) => {
-        const lines = block.split('\n')
-        if (lines[0].startsWith('- ')) {
+      {segments.map((segment, si) => {
+        if (!segment) return null
+
+        if (segment.startsWith('```')) {
+          const body = segment.replace(/^```[^\n]*\n?/, '').replace(/```$/, '')
           return (
-            <ul key={bi}>
-              {lines.map((l, li) => (
-                <li key={li}>
-                  <Inline text={l.replace(/^-\s*/, '')} citations={citations} />
-                </li>
-              ))}
-            </ul>
+            <pre key={si}>
+              <code>{body.replace(/\n$/, '')}</code>
+            </pre>
           )
         }
-        return (
-          <p key={bi}>
-            <Inline text={block} citations={citations} />
-          </p>
+
+        return segment.split('\n\n').map((block, bi) =>
+          // Group consecutive lines by kind rather than typing the whole block
+          // from its first line: models routinely emit a lead-in sentence
+          // followed by bullets in one block ("What it covers:\n- …"), which
+          // first-line detection rendered as one run-on paragraph with the
+          // dashes left inline.
+          groupLines(block).map((run, ri) => {
+            const key = `${si}-${bi}-${ri}`
+            if (run.kind === 'p') {
+              return (
+                <p key={key}>
+                  <Inline text={run.lines.join(' ')} citations={citations} />
+                </p>
+              )
+            }
+            const List = run.kind === 'ul' ? 'ul' : 'ol'
+            return (
+              <List key={key}>
+                {run.lines.map((l, li) => (
+                  <li key={li}>
+                    <Inline text={l.replace(MARKER, '')} citations={citations} />
+                  </li>
+                ))}
+              </List>
+            )
+          }),
         )
       })}
     </>
-  )
-}
-
-/* Sources rail — arrives with the first token, same order Perplexity uses.
-   These are uploaded PDFs, not web pages, so each card expands its excerpt
-   in place instead of linking out. */
-function SourceRail({ citations, loading }: { citations: Citation[]; loading: boolean }) {
-  const [openIdx, setOpenIdx] = useState<number | null>(null)
-
-  if (!loading && citations.length === 0) return null
-
-  return (
-    <div className="mb-5">
-      <div className="mb-2 flex items-center gap-2">
-        <Search className="size-3 text-faint" aria-hidden="true" />
-        <span className="eyebrow">{loading ? 'Searching your documents' : `${citations.length} sources`}</span>
-      </div>
-
-      {loading ? (
-        <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          {[0, 1, 2].map((i) => (
-            <div key={i} className="w-[190px] shrink-0 rounded-[10px] border border-border bg-surface p-2.5">
-              <Skeleton className="h-2.5 w-3/4" />
-              <Skeleton className="mt-2 h-2 w-1/2" />
-            </div>
-          ))}
-        </div>
-      ) : (
-        <div className="flex flex-col gap-1.5">
-          {citations.map((c, i) => {
-            const open = openIdx === c.index
-            return (
-              <motion.div
-                key={c.index}
-                id={`source-${c.index}`}
-                initial={{ opacity: 0, y: 6 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: i * 0.05, duration: 0.35, ease }}
-                className="overflow-hidden rounded-[10px] border border-border bg-surface"
-              >
-                <button
-                  type="button"
-                  onClick={() => setOpenIdx(open ? null : c.index)}
-                  aria-expanded={open}
-                  className="flex w-full items-center gap-2.5 px-3 py-2 text-left transition-colors hover:bg-sunken"
-                >
-                  <span className="flex size-5 shrink-0 items-center justify-center rounded-[5px] bg-sunken font-mono text-[10px] font-medium text-muted">
-                    {c.index}
-                  </span>
-                  <FileText className="size-3.5 shrink-0 text-faint" />
-                  <span className="min-w-0 flex-1 truncate text-[12.5px] text-ink">{c.filename}</span>
-                  <span className="shrink-0 font-mono text-[10.5px] text-faint">p.{c.page_number}</span>
-                  <ChevronDown
-                    className={cn('size-3.5 shrink-0 text-faint transition-transform', open && 'rotate-180')}
-                  />
-                </button>
-                <AnimatePresence initial={false}>
-                  {open && (
-                    <motion.div
-                      initial={{ height: 0, opacity: 0 }}
-                      animate={{ height: 'auto', opacity: 1 }}
-                      exit={{ height: 0, opacity: 0 }}
-                      transition={{ duration: 0.2, ease }}
-                    >
-                      <p className="border-t border-border px-3 py-2.5 text-[12.5px] leading-[1.55] text-muted">
-                        “{c.excerpt}”
-                      </p>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </motion.div>
-            )
-          })}
-        </div>
-      )}
-    </div>
   )
 }
 
@@ -168,7 +140,7 @@ function Actions({ text, onRetry }: { text: string; onRetry: () => void }) {
   }
 
   return (
-    <div className="mt-4 flex items-center gap-1 opacity-70 transition-opacity focus-within:opacity-100 group-hover/msg:opacity-100">
+    <div className="-ml-2 mt-4 flex items-center gap-1 opacity-0 transition-opacity duration-150 focus-within:opacity-100 group-hover/msg:opacity-100 max-md:opacity-100">
       <Tooltip label={copied ? 'Copied' : 'Copy answer'}>
         <Button variant="ghost" size="icon-sm" onClick={copy} aria-label="Copy answer">
           <AnimatePresence initial={false} mode="wait">
@@ -180,7 +152,7 @@ function Actions({ text, onRetry }: { text: string; onRetry: () => void }) {
               transition={{ duration: 0.15 }}
               className="flex"
             >
-              {copied ? <Check className="text-accent" /> : <Copy />}
+              {copied ? <Check className="text-success" /> : <Copy />}
             </motion.span>
           </AnimatePresence>
         </Button>
@@ -191,6 +163,26 @@ function Actions({ text, onRetry }: { text: string; onRetry: () => void }) {
         </Button>
       </Tooltip>
     </div>
+  )
+}
+
+/* One row shape for both roles — avatar gutter, name, then content. Keeping
+   the gutter identical is what makes a thread read as one continuous
+   conversation instead of alternating left/right islands. */
+function Turn({ kind, name, children }: { kind: 'user' | 'assistant'; name: string; children: React.ReactNode }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.24, ease }}
+      className="group/msg flex gap-4"
+    >
+      <Avatar kind={kind} />
+      <div className="min-w-0 flex-1 pt-1">
+        <p className="mb-2 text-[13px] font-semibold tracking-[-0.005em] text-ink">{name}</p>
+        {children}
+      </div>
+    </motion.div>
   )
 }
 
@@ -205,57 +197,56 @@ export const Message = memo(function Message({
 
   if (role === 'user') {
     return (
-      <motion.div
-        initial={{ opacity: 0, y: 8 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.3, ease }}
-        className="flex justify-end"
-      >
-        <div className="max-w-[85%] rounded-[16px] rounded-br-[6px] border border-border bg-sunken px-4 py-2.5 text-[15px] leading-[1.55] text-ink sm:max-w-[75%]">
+      <Turn kind="user" name="You">
+        <div className="w-fit max-w-full rounded-[var(--radius-card)] rounded-tl-[4px] border border-border bg-sunken px-4 py-2.5 text-[15px] leading-[1.6] text-ink">
           {content}
         </div>
-      </motion.div>
+      </Turn>
+    )
+  }
+
+  if (phase === 'error') {
+    return (
+      <Turn kind="assistant" name="Ask Sitare">
+        <ErrorCard
+          title="That answer didn't come through"
+          description={content || 'Something went wrong reaching the assistant.'}
+          action={
+            <Button variant="outline" size="sm" onClick={onRetry}>
+              <RotateCcw />
+              Try again
+            </Button>
+          }
+        />
+      </Turn>
     )
   }
 
   const searching = phase === 'searching'
 
-  if (phase === 'error') {
-    return (
-      <Alert
-        title={content || 'Something went wrong answering that.'}
-        action={
-          <Button variant="outline" size="sm" onClick={onRetry}>
-            <RotateCcw />
-            Try again
-          </Button>
-        }
-      />
-    )
-  }
-
   return (
-    <div className="group/msg">
+    <Turn kind="assistant" name="Ask Sitare">
       <SourceRail citations={citations} loading={searching} />
 
       {searching ? (
-        <div className="space-y-2.5" aria-hidden="true">
-          <Skeleton className="h-3.5 w-[92%]" />
-          <Skeleton className="h-3.5 w-[85%]" />
-          <Skeleton className="h-3.5 w-[60%]" />
-        </div>
+        <AnswerSkeleton />
       ) : (
-        <div className="prose-answer text-ink" aria-live="polite" aria-busy={phase === 'revealing'}>
+        <div className="prose-answer" aria-live="polite" aria-busy={phase === 'revealing'}>
           <Blocks text={content} citations={citations} />
           {phase === 'revealing' && (
-            <span className="ml-0.5 inline-block h-[1.05em] w-[2px] translate-y-[2px] animate-caret bg-accent align-baseline" />
+            <span
+              className="ml-0.5 inline-block h-[1.05em] w-[2px] translate-y-[2px] animate-caret bg-accent align-baseline"
+              aria-hidden="true"
+            />
           )}
         </div>
       )}
 
-      {phase === 'stopped' && <p className="mt-3 text-[12px] text-faint">Stopped.</p>}
+      {phase === 'stopped' && (
+        <p className="mt-3 text-[12.5px] text-faint">Stopped generating.</p>
+      )}
 
       {phase === 'done' && <Actions text={content} onRetry={onRetry} />}
-    </div>
+    </Turn>
   )
 })

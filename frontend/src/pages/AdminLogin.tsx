@@ -3,11 +3,11 @@ import { Link, useNavigate } from "react-router-dom";
 
 import { Logo } from "../components/chat/Logo";
 import { Button } from "../components/chat/ui/button";
-import { Alert } from "../components/chat/ui/primitives";
+import { ErrorCard } from "../components/chat/ui/primitives";
 import { useAuth } from "../hooks/useAuth";
 
 const inputCls =
-  "h-10 w-full rounded-[10px] border border-border bg-canvas px-3 text-[14px] text-ink outline-none transition-colors placeholder:text-faint focus:border-accent focus:ring-4 focus:ring-accent-soft";
+  "h-10 w-full rounded-[var(--radius-control)] border border-border bg-canvas px-3 text-[14px] text-ink outline-none transition-colors placeholder:text-faint focus:border-accent focus:ring-4 focus:ring-accent-soft";
 
 // Wrapping the input in the label (instead of a bare <label>text</label>
 // followed by an unrelated <input>) is what actually associates the two —
@@ -46,7 +46,10 @@ export default function AdminLogin() {
   };
 
   return (
-    <div className="flex flex-1 items-center justify-center px-6 py-12">
+    /* overflow-y-auto: the app frame is a fixed viewport height now, so this
+       page owns its own scrolling — otherwise the card clips on short
+       viewports (landscape phones) instead of scrolling. */
+    <div className="flex flex-1 items-center justify-center overflow-y-auto px-6 py-12">
       <div className="w-full max-w-[380px]">
         <div className="mb-7 flex flex-col items-center text-center">
           <Logo />
@@ -58,7 +61,7 @@ export default function AdminLogin() {
 
         <form
           onSubmit={onSubmit}
-          className="rounded-[16px] border border-border bg-surface p-6 shadow-[var(--shadow-card)]"
+          className="rounded-[var(--radius-panel)] border border-border bg-surface p-6 shadow-[var(--shadow-card)]"
         >
           <div className="flex flex-col gap-4">
             <Field label="Organization ID">
@@ -92,9 +95,9 @@ export default function AdminLogin() {
             </Field>
           </div>
 
-          {error && <Alert className="mt-4" title="Couldn't sign you in" description={error} />}
+          {error && <ErrorCard className="mt-4" title="Couldn't sign you in" description={error} />}
 
-          <Button type="submit" variant="primary" size="lg" loading={busy} className="mt-5 w-full">
+          <Button type="submit" variant="accent" size="lg" loading={busy} className="mt-6 w-full">
             {busy ? "Signing in…" : "Sign in"}
           </Button>
         </form>

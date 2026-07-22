@@ -12,6 +12,8 @@ node_modules/
 dist/
 build/
 .vite/
+# Vite writes these next to vite.config.ts while the dev server is running
+vite.config.ts.timestamp-*
 
 # Env / secrets
 .env

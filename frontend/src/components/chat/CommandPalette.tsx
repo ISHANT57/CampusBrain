@@ -43,8 +43,10 @@ export function CommandPalette({
       label="Command palette"
       shouldFilter
       container={container ?? undefined}
-      overlayClassName="fixed inset-0 z-50 bg-ink/40 backdrop-blur-[2px]"
-      contentClassName="fixed left-1/2 top-[15vh] z-50 w-[min(560px,calc(100vw-2rem))] -translate-x-1/2 animate-rise overflow-hidden rounded-[16px] border border-border bg-surface shadow-[var(--shadow-card)]"
+      /* black/50, not ink/40: --ink is near-white in dark mode, so an
+         ink-based scrim brightened the page instead of dimming it. */
+      overlayClassName="fixed inset-0 z-50 bg-black/50 backdrop-blur-[2px]"
+      contentClassName="fixed left-1/2 top-[15vh] z-50 w-[min(560px,calc(100vw-2rem))] -translate-x-1/2 animate-rise overflow-hidden rounded-[var(--radius-panel)] border border-border bg-raised shadow-[var(--shadow-float)]"
     >
       <div className="flex items-center gap-2.5 border-b border-border px-4">
         <Command.Input

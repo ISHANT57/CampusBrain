@@ -85,7 +85,11 @@ export default function App() {
   const portalTarget = scopeReady ? scopeRef.current : null;
 
   return (
-    <div ref={scopeRef} className={cn("cb-scope flex min-h-dvh flex-col", dark && "dark")}>
+    /* h-dvh, not min-h-dvh: the chat's thread and the admin shell's main
+       both scroll internally, so the app frame must be exactly one viewport
+       tall. With min-h- the frame grew past the viewport instead, which
+       scrolled the whole page and pushed the composer below the fold. */
+    <div ref={scopeRef} className={cn("cb-scope flex h-dvh flex-col overflow-hidden", dark && "dark")}>
       <Routes>
         {/* Public: no token, no account, no redirect — a student lands here
             and can ask immediately. */}

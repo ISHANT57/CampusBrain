@@ -91,7 +91,7 @@ export default function Upload() {
         tabIndex={0}
         aria-label="Upload documents — drop files here or press Enter to choose"
         className={cn(
-          "flex cursor-pointer flex-col items-center gap-3 rounded-[16px] border-2 border-dashed px-6 py-14 text-center transition-colors duration-150",
+          "flex cursor-pointer flex-col items-center gap-3 rounded-[var(--radius-panel)] border-2 border-dashed px-6 py-14 text-center transition-colors duration-150",
           dragActive
             ? "border-accent bg-accent-soft"
             : "border-border bg-sunken hover:border-border-strong hover:bg-surface",
@@ -120,7 +120,7 @@ export default function Upload() {
           {items.map((i) => {
             const meta = STATUS_META[i.status];
             return (
-              <li key={i.name} className="rounded-[12px] border border-border bg-surface px-4 py-3">
+              <li key={i.name} className="rounded-[var(--radius-card)] border border-border bg-surface px-4 py-3">
                 <div className="flex items-center gap-3">
                   <meta.icon
                     className={cn("size-4 shrink-0", meta.icon_color, meta.spin && "animate-spin")}

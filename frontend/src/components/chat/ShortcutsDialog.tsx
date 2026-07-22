@@ -39,10 +39,14 @@ export function ShortcutsDialog({
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal container={container ?? undefined}>
-        <Dialog.Overlay className="fixed inset-0 z-50 bg-ink/40 backdrop-blur-[2px]" />
-        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-[min(440px,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 animate-rise rounded-[16px] border border-border bg-surface p-6 shadow-[var(--shadow-card)]">
+        {/* black/50, not ink/40: --ink is near-white in dark mode, so an
+            ink-based scrim brightened the page instead of dimming it. */}
+        <Dialog.Overlay className="fixed inset-0 z-50 bg-black/50 backdrop-blur-[2px]" />
+        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-[min(440px,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 animate-rise rounded-[var(--radius-panel)] border border-border bg-raised p-6 shadow-[var(--shadow-float)]">
           <div className="flex items-start justify-between gap-4">
-            <Dialog.Title className="font-serif text-[19px] text-ink">Keyboard shortcuts</Dialog.Title>
+            <Dialog.Title className="text-[17px] font-semibold tracking-[-0.01em] text-ink">
+              Keyboard shortcuts
+            </Dialog.Title>
             <Dialog.Close asChild>
               <Button variant="ghost" size="icon-sm" aria-label="Close">
                 <X />

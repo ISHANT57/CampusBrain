@@ -1,5 +1,6 @@
 import { motion } from 'framer-motion'
 import {
+  ArrowUpRight,
   Briefcase,
   ClipboardCheck,
   GraduationCap,
@@ -26,52 +27,61 @@ const SUGGESTIONS: { icon: LucideIcon; label: string; hint: string }[] = [
 
 export function EmptyState({ onAsk }: { onAsk: (text: string) => void }) {
   return (
-    <div className="mx-auto flex max-w-[720px] flex-col items-center px-5 pb-8 pt-[max(8vh,48px)] text-center">
-      <motion.div
+    <div className="mx-auto flex w-full max-w-[820px] flex-col items-center px-5 pb-10 pt-[max(6vh,40px)] text-center sm:px-8">
+      <motion.span
         initial={{ opacity: 0, scale: 0.85 }}
         animate={{ opacity: 1, scale: 1 }}
-        transition={{ duration: 0.5, ease }}
+        transition={{ duration: 0.32, ease }}
+        className="flex size-12 items-center justify-center rounded-[14px] bg-accent text-accent-fg shadow-[var(--shadow-card)]"
       >
-        <StarMark className="size-7 text-accent" />
-      </motion.div>
+        <StarMark className="size-6" />
+      </motion.span>
 
-      <motion.h1
-        initial={{ opacity: 0, y: 10 }}
+      <motion.h2
+        initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.05, duration: 0.5, ease }}
-        className="mt-5 font-serif text-[30px] leading-[1.15] tracking-[-0.02em] text-ink sm:text-[34px]"
+        transition={{ delay: 0.04, duration: 0.32, ease }}
+        className="mt-6 text-[28px] font-[650] leading-[1.2] tracking-[-0.025em] text-ink sm:text-[32px]"
       >
         What would you like to know?
-      </motion.h1>
+      </motion.h2>
 
       <motion.p
-        initial={{ opacity: 0, y: 10 }}
+        initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.1, duration: 0.5, ease }}
-        className="mt-3 max-w-[440px] text-[15px] leading-[1.6] text-muted"
+        transition={{ delay: 0.08, duration: 0.32, ease }}
+        className="mt-3 max-w-[460px] text-[15px] leading-[1.6] text-muted"
       >
         Ask about admissions, the scholarship, coursework, or life on campus. Every answer cites its
         sources.
       </motion.p>
 
-      <div className="mt-9 grid w-full gap-2 text-left sm:grid-cols-2">
+      <div className="mt-10 grid w-full gap-2 text-left sm:grid-cols-2">
         {SUGGESTIONS.map((s, i) => (
           <motion.button
             key={s.label}
             type="button"
             onClick={() => onAsk(s.label)}
-            initial={{ opacity: 0, y: 10 }}
+            initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.14 + i * 0.04, duration: 0.45, ease }}
-            className="group flex items-start gap-3 rounded-[12px] border border-border bg-surface p-3.5 text-left transition-[border-color,background-color,transform] hover:-translate-y-px hover:border-border-strong hover:bg-sunken"
+            transition={{ delay: 0.12 + i * 0.03, duration: 0.28, ease }}
+            className="group flex items-center gap-3 rounded-[var(--radius-card)] border border-border bg-surface p-4 text-left transition-[border-color,background-color,box-shadow] duration-150 hover:border-accent-border hover:bg-hover hover:shadow-[var(--shadow-card)]"
           >
-            <s.icon className="mt-px size-4 shrink-0 text-faint transition-colors group-hover:text-accent" />
-            <span className="min-w-0">
-              <span className="block text-[13.5px] leading-[1.45] text-ink">{s.label}</span>
-              <span className="mt-1 block font-mono text-[10.5px] uppercase tracking-[0.08em] text-faint">
-                {s.hint}
-              </span>
+            <span className="flex size-9 shrink-0 items-center justify-center rounded-[10px] bg-sunken text-faint transition-colors duration-150 group-hover:bg-accent-soft group-hover:text-accent">
+              <s.icon className="size-4" />
             </span>
+            <span className="min-w-0 flex-1">
+              {/* Wraps to a second line rather than truncating — these are
+                  full questions, and a clipped question can't be read. */}
+              <span className="block text-[13.5px] font-medium leading-[1.4] text-balance text-ink">
+                {s.label}
+              </span>
+              <span className="eyebrow mt-1 block">{s.hint}</span>
+            </span>
+            <ArrowUpRight
+              className="size-4 shrink-0 text-faint opacity-0 transition-opacity duration-150 group-hover:opacity-100"
+              aria-hidden="true"
+            />
           </motion.button>
         ))}
       </div>
