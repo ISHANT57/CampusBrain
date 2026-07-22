@@ -1,14 +1,27 @@
+from pydantic import Field
 from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
-    postgres_user: str
-    postgres_password: str
-    postgres_db: str
+    # Discrete fields — used for self-hosted Postgres (dev, or the VPS path)
+    # where there's no single connection string to hand around. Optional
+    # (not required) because a Neon-style deploy sets DATABASE_URL instead
+    # and never touches these; see database_url below for how the two combine.
+    postgres_user: str = ""
+    postgres_password: str = ""
+    postgres_db: str = ""
     # Container-to-container traffic always uses Postgres's own port (5432),
     # not POSTGRES_PORT (that only maps the port for connections from the host).
     postgres_host: str = "postgres"
     postgres_internal_port: int = 5432
+
+    # Set by Neon (or any managed Postgres that hands out one connection
+    # string) — takes priority over the discrete fields above when present.
+    # Needs an explicit alias: the property below is already named
+    # `database_url`, so without this, pydantic-settings would map this field
+    # to env var DATABASE_URL_RAW (its own uppercased name), not the
+    # DATABASE_URL every managed Postgres provider actually sets.
+    database_url_raw: str | None = Field(default=None, alias="DATABASE_URL")
 
     jwt_secret_key: str
     jwt_algorithm: str = "HS256"
@@ -35,8 +48,15 @@ class Settings(BaseSettings):
     embedding_model: str = "gemini-embedding-001"
     embedding_dim: int = 768
 
+    # Discrete host/port — self-hosted Qdrant (dev, or the VPS path), no auth.
     qdrant_host: str = "qdrant"
     qdrant_internal_port: int = 6333
+    # Set for Qdrant Cloud — a full URL (e.g.
+    # https://xxxx.aws.cloud.qdrant.io), takes priority over qdrant_host/
+    # qdrant_internal_port above when present. qdrant_api_key is required
+    # alongside it; Qdrant Cloud rejects unauthenticated requests.
+    qdrant_url: str | None = None
+    qdrant_api_key: str = ""
 
     openrouter_api_key: str = ""
     # Change LLM_MODEL in .env to try other OpenRouter models. Default is a
@@ -55,6 +75,8 @@ class Settings(BaseSettings):
 
     @property
     def database_url(self) -> str:
+        if self.database_url_raw:
+            return self.database_url_raw
         return (
             f"postgresql+psycopg2://{self.postgres_user}:{self.postgres_password}"
             f"@{self.postgres_host}:{self.postgres_internal_port}/{self.postgres_db}"

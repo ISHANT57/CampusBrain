@@ -9,28 +9,19 @@ Fully wired and ready:
 - **Object storage** — Supabase Storage, S3-compatible (`backend/app/infrastructure/storage.py`)
 - **Embeddings** — Gemini API (`backend/app/infrastructure/embeddings/`)
 - **LLM** — OpenRouter (`backend/app/infrastructure/llm/`)
+- **Database** — Neon, via `DATABASE_URL` (`backend/app/core/config.py`'s
+  `database_url` property prefers this over the discrete `POSTGRES_*` fields
+  when set — verified: Neon's connection string works with SQLAlchemy's
+  default `postgresql://` dialect resolution, no `+psycopg2` suffix needed)
+- **Vector database** — Qdrant Cloud, via `QDRANT_URL` + `QDRANT_API_KEY`
+  (`backend/app/infrastructure/vector_store.py` — verified against
+  qdrant-client's own docs for the Cloud connection pattern)
 - **CORS** — configurable via `CORS_ALLOWED_ORIGINS`
 - **Frontend → backend calls** — configurable via `VITE_API_BASE_URL`
 
-**Not yet wired — flagging honestly rather than claiming this is fully done:**
-- **Neon Postgres** — `backend/app/core/config.py`'s `database_url` builds a
-  connection string from discrete fields (`POSTGRES_USER`/`POSTGRES_HOST`/etc.).
-  Neon's connection string needs `?sslmode=require&channel_binding=require`
-  query params this doesn't produce. Until this is updated, point
-  `POSTGRES_HOST` at Neon's pooler hostname and this will likely fail to
-  connect (SSL required, not offered). Smallest real fix: add a
-  `DATABASE_URL: str | None = None` field to `Settings` that, if set,
-  overrides the discrete-field construction — then `DATABASE_URL` can be
-  Neon's connection string verbatim. Not done in this pass.
-- **Qdrant Cloud** — `backend/app/infrastructure/vector_store.py` constructs
-  `QdrantClient(host=..., port=...)` with no `api_key` and no `https=True`.
-  Qdrant Cloud requires both. Until updated, this will fail to authenticate
-  against a Qdrant Cloud cluster. Fix is small (`QdrantClient(url=settings.qdrant_url,
-  api_key=settings.qdrant_api_key)`) but wasn't part of this migration's scope
-  (Supabase Storage was) — say the word and I'll do it next.
-
-Everything below assumes those two are resolved first, since the backend
-can't actually start against Neon/Qdrant Cloud without them.
+All five external services this app depends on are now configurable purely
+through environment variables, with no code path assuming self-hosted
+infrastructure is the only option.
 
 ## 1. Render — backend
 
@@ -57,13 +48,9 @@ Two things that aren't optional:
 **Environment variables** (Render dashboard → Environment):
 
 ```
-POSTGRES_USER=...            # from Neon, once DATABASE_URL support lands (see above)
-POSTGRES_PASSWORD=...
-POSTGRES_DB=...
-POSTGRES_HOST=...
-POSTGRES_INTERNAL_PORT=5432
+DATABASE_URL=...              # Neon's connection string, verbatim (includes ?sslmode=require&channel_binding=require)
 
-JWT_SECRET_KEY=...           # openssl rand -hex 32 — do not reuse the dev default
+JWT_SECRET_KEY=...            # openssl rand -hex 32 — do not reuse the dev default
 JWT_ALGORITHM=HS256
 JWT_EXPIRE_MINUTES=60
 
@@ -80,8 +67,8 @@ EMBEDDING_DIM=768
 OPENROUTER_API_KEY=...
 LLM_MODEL=openai/gpt-oss-20b:free
 
-QDRANT_HOST=...              # once Qdrant Cloud support lands (see above)
-QDRANT_INTERNAL_PORT=6333
+QDRANT_URL=...                # e.g. https://xxxx.aws.cloud.qdrant.io
+QDRANT_API_KEY=...
 
 CORS_ALLOWED_ORIGINS=https://your-app.vercel.app   # set after step 2, once you have the real URL
 ```

@@ -6,7 +6,14 @@ from qdrant_client.models import Distance, VectorParams
 from app.core.config import settings
 from app.infrastructure.embeddings.provider import get_embedding_provider
 
-_client = QdrantClient(host=settings.qdrant_host, port=settings.qdrant_internal_port)
+# qdrant_url set (Qdrant Cloud) takes priority over host/port (self-hosted,
+# dev or the VPS path) — verified against qdrant-client's own docs: Cloud
+# connections are `QdrantClient(url=..., api_key=...)`, not host/port, and
+# Cloud rejects requests with no api_key.
+if settings.qdrant_url:
+    _client = QdrantClient(url=settings.qdrant_url, api_key=settings.qdrant_api_key or None)
+else:
+    _client = QdrantClient(host=settings.qdrant_host, port=settings.qdrant_internal_port)
 
 
 def collection_name(org_id: int) -> str:
