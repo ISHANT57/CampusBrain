@@ -159,7 +159,9 @@ export function Tooltip({
       <span
         role="tooltip"
         className={cn(
-          'pointer-events-none absolute z-50 flex items-center gap-1.5 whitespace-nowrap rounded-[var(--radius-control)] border border-border bg-raised px-2.5 py-1.5 text-[12px] text-ink opacity-0 shadow-[var(--shadow-float)] transition-opacity duration-150 group-hover/tt:opacity-100 group-focus-within/tt:opacity-100',
+          // coarse:hidden — a CSS hover tooltip fires on tap and then sticks
+          // until you tap elsewhere, which on touch reads as a stuck popup.
+          'pointer-events-none absolute z-50 flex items-center gap-1.5 whitespace-nowrap rounded-[var(--radius-control)] border border-border bg-raised px-2.5 py-1.5 text-[12px] text-ink opacity-0 shadow-[var(--shadow-float)] transition-opacity duration-150 group-hover/tt:opacity-100 group-focus-within/tt:opacity-100 coarse:hidden',
           pos,
         )}
       >

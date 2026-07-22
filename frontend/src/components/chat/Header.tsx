@@ -24,7 +24,10 @@ export function Header({
   onToggleTheme: () => void
 }) {
   return (
-    <header className="flex h-16 shrink-0 items-center gap-3 border-b border-border bg-canvas/80 px-4 backdrop-blur-md sm:px-6">
+    <header
+      data-safe-x
+      className="flex h-16 shrink-0 items-center gap-3 border-b border-border bg-canvas/80 px-4 backdrop-blur-md sm:px-6"
+    >
       {!sidebarOpen && (
         <Tooltip label={<>Show sidebar <Kbd>{mod} B</Kbd></>}>
           <Button variant="ghost" size="icon-sm" onClick={onOpenSidebar} aria-label="Show sidebar">

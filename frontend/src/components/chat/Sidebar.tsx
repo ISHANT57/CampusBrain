@@ -41,7 +41,7 @@ function SidebarItem({
         onClick={onOpen}
         aria-current={active ? 'page' : undefined}
         className={cn(
-          'w-full truncate rounded-[var(--radius-control)] py-2.5 pl-3 pr-9 text-left text-[13.5px] leading-[1.4] transition-colors duration-150',
+          'w-full truncate rounded-[var(--radius-control)] py-2.5 coarse:py-3 pl-3 pr-9 coarse:pr-11 text-left text-[13.5px] leading-[1.4] transition-colors duration-150',
           active
             ? 'bg-surface font-medium text-ink shadow-[var(--shadow-card)]'
             : 'text-muted hover:bg-hover hover:text-ink',
@@ -53,7 +53,7 @@ function SidebarItem({
         type="button"
         onClick={onDelete}
         aria-label={`Delete conversation: ${c.title}`}
-        className="absolute right-1.5 top-1/2 flex size-7 -translate-y-1/2 items-center justify-center rounded-[6px] text-faint opacity-0 transition-[opacity,color,background-color] duration-150 hover:bg-error-soft hover:text-error focus-visible:opacity-100 group-hover/row:opacity-100"
+        className="absolute right-1.5 top-1/2 flex size-7 coarse:size-9 -translate-y-1/2 items-center justify-center rounded-[6px] text-faint opacity-0 coarse:opacity-100 transition-[opacity,color,background-color] duration-150 hover:bg-error-soft hover:text-error focus-visible:opacity-100 group-hover/row:opacity-100"
       >
         <Trash2 className="size-3.5" />
       </button>
@@ -87,7 +87,7 @@ function SidebarContent({
 
   return (
     <div className="flex h-full flex-col bg-sunken">
-      <div className="flex h-16 shrink-0 items-center gap-2 px-4">
+      <div data-safe-top className="flex h-16 shrink-0 items-center gap-2 px-4">
         <Logo />
         <Tooltip
           className="ml-auto"
@@ -103,7 +103,9 @@ function SidebarContent({
         <Button variant="outline" size="md" onClick={onNew} className="w-full justify-start gap-2.5">
           <MessageSquarePlus className="text-muted" />
           New conversation
-          <Kbd className="ml-auto">{mod} ⇧ O</Kbd>
+          {/* No keyboard, no shortcut worth advertising — and it was being
+              clipped by the drawer's width anyway. */}
+          <Kbd className="ml-auto coarse:hidden">{mod} ⇧ O</Kbd>
         </Button>
 
         {/* Icon is centered against the input itself, not this wrapper — the
@@ -123,7 +125,7 @@ function SidebarContent({
         </div>
       </div>
 
-      <nav aria-label="Conversation history" className="flex-1 overflow-y-auto px-4 py-2">
+      <nav data-scroll aria-label="Conversation history" className="flex-1 overflow-y-auto px-4 py-2">
         {groups.length === 0 && (
           <p className="px-1 py-8 text-center text-[13px] leading-relaxed text-faint">
             {conversations.length ? 'No matching conversations.' : 'Your conversations will appear here.'}
@@ -147,7 +149,7 @@ function SidebarContent({
         ))}
       </nav>
 
-      <div className="shrink-0 border-t border-border p-4">
+      <div data-safe-bottom className="shrink-0 border-t border-border p-4">
         <div className="flex items-start gap-2.5 rounded-[var(--radius-control)] bg-canvas p-3">
           <Info className="mt-px size-3.5 shrink-0 text-faint" aria-hidden="true" />
           <p className="text-[11.5px] leading-[1.5] text-faint">

@@ -88,7 +88,10 @@ export default function Chat({ portalTarget }: { portalTarget: HTMLElement | nul
   }, [chat.streaming])
 
   useEffect(() => {
-    if (!pinned) return
+    // Skip while the thread is empty. The welcome screen is taller than a
+    // phone viewport, so pinning it to the bottom on mount opened the app
+    // scrolled past its own headline.
+    if (!pinned || chat.messages.length === 0) return
     const el = scroller.current
     if (el) el.scrollTop = el.scrollHeight
   }, [chat.messages, pinned])
@@ -132,7 +135,12 @@ export default function Chat({ portalTarget }: { portalTarget: HTMLElement | nul
           onToggleTheme={toggleTheme}
         />
 
-        <div ref={scroller} onScroll={onScroll} className="relative flex-1 overflow-y-auto">
+        <div
+          ref={scroller}
+          onScroll={onScroll}
+          data-scroll
+          className="relative flex-1 overflow-y-auto"
+        >
           {empty ? (
             <EmptyState onAsk={chat.send} />
           ) : (
@@ -177,7 +185,9 @@ export default function Chat({ portalTarget }: { portalTarget: HTMLElement | nul
             </div>
           )}
 
-          <div className={`${COLUMN} pb-5 pt-1`}>
+          {/* data-safe-bottom keeps the composer clear of the iOS home
+              indicator; pb-5 is the padding it adds to. */}
+          <div data-safe-bottom className={`${COLUMN} pb-5 pt-1`}>
             <Composer
               ref={composer}
               onSubmit={chat.send}

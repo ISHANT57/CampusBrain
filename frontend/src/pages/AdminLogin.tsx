@@ -49,7 +49,7 @@ export default function AdminLogin() {
     /* overflow-y-auto: the app frame is a fixed viewport height now, so this
        page owns its own scrolling — otherwise the card clips on short
        viewports (landscape phones) instead of scrolling. */
-    <div className="flex flex-1 items-center justify-center overflow-y-auto px-6 py-12">
+    <div data-scroll className="flex flex-1 items-center justify-center overflow-y-auto px-6 py-12">
       <div className="w-full max-w-[380px]">
         <div className="mb-7 flex flex-col items-center text-center">
           <Logo />

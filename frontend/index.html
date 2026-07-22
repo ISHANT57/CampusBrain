@@ -2,11 +2,34 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- viewport-fit=cover lets the app paint under the notch and home
+         indicator; theme.css then pads content back with env(safe-area-*).
+         No maximum-scale/user-scalable=no — pinch zoom stays available,
+         because disabling it is an accessibility failure, and the iOS
+         focus-zoom it's usually used to prevent is fixed properly by the
+         16px input font-size rule instead. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>Ask Sitare</title>
-    <!-- theme.css asks for these two by name (--font-sans/--font-mono).
-         Source Serif was dropped with the serif headings — the UI is now
-         sans throughout, so loading a third family bought nothing. -->
+    <meta
+      name="description"
+      content="Ask questions about Sitare University — admissions, scholarship, curriculum and campus life, answered with sources."
+    />
+
+    <!-- Updated at runtime by ThemeProvider to match the in-app theme, since
+         that's a manual toggle rather than a prefers-color-scheme follow. -->
+    <meta name="theme-color" content="#0c0e12" />
+
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Ask Sitare" />
+    <!-- black-translucent = the web app paints its own status bar area, which
+         is what viewport-fit=cover + safe-area insets are set up for. -->
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="mobile-web-app-capable" content="yes" />
+
+    <!-- theme.css asks for these two by name (--font-sans/--font-mono). -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link

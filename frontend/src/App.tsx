@@ -46,7 +46,7 @@ function AdminShell() {
           </Tooltip>
         </div>
       </header>
-      <main className="flex-1 overflow-y-auto">
+      <main data-scroll data-safe-bottom className="flex-1 overflow-y-auto">
         <Outlet />
       </main>
     </div>

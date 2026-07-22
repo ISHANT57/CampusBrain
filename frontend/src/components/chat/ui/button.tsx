@@ -17,12 +17,14 @@ const buttonVariants = cva(
         ghost: 'text-muted hover:bg-hover hover:text-ink',
         subtle: 'bg-sunken text-ink hover:bg-hover',
       },
+      // coarse: bumps toward the ~44px touch guideline on finger input while
+      // leaving the desktop scale alone.
       size: {
-        sm: 'h-8 px-3 text-[13px] rounded-[var(--radius-control)] [&_svg]:size-4',
-        md: 'h-9 px-3.5 text-[13.5px] rounded-[var(--radius-control)] [&_svg]:size-4',
+        sm: 'h-8 coarse:h-10 px-3 text-[13px] rounded-[var(--radius-control)] [&_svg]:size-4',
+        md: 'h-9 coarse:h-11 px-3.5 text-[13.5px] rounded-[var(--radius-control)] [&_svg]:size-4',
         lg: 'h-12 px-5 text-[15px] rounded-[var(--radius-card)] [&_svg]:size-[18px]',
-        icon: 'size-9 rounded-[var(--radius-control)] [&_svg]:size-[18px]',
-        'icon-sm': 'size-8 rounded-[var(--radius-control)] [&_svg]:size-4',
+        icon: 'size-9 coarse:size-11 rounded-[var(--radius-control)] [&_svg]:size-[18px]',
+        'icon-sm': 'size-8 coarse:size-10 rounded-[var(--radius-control)] [&_svg]:size-4',
       },
     },
     defaultVariants: { variant: 'outline', size: 'md' },
