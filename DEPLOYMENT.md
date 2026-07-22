@@ -31,16 +31,22 @@ infrastructure is the only option.
 |---|---|
 | Root Directory | `backend` |
 | Runtime | Docker (uses `backend/Dockerfile`) |
-| Docker Command *(Settings → Advanced, NOT "Start Command" — that field is for native-runtime services and does nothing for a Docker-runtime one)* | `sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 4"` |
+| Docker Command *(Settings → Advanced, NOT "Start Command" — that field is for native-runtime services and does nothing for a Docker-runtime one)* | `sh scripts/render-start.sh` |
 
 **Pre-Deploy Command would be the clean way to run migrations, but it's a
-paid-plan feature — confirmed unavailable on Render's free tier.** The
-`sh -c "... && ..."` chain above is the free-tier equivalent: Render's own
-docs document this exact multi-command pattern for the Docker Command field,
-which has no tier restriction. `alembic upgrade head` is idempotent (a no-op
-check if nothing's changed), so running it on every boot rather than only
-before a deploy costs nothing, and `&&` means uvicorn never starts against a
-schema migrations just failed to apply.
+paid-plan feature — confirmed unavailable on Render's free tier.** A first
+attempt at a free-tier equivalent — chaining `sh -c "alembic upgrade head &&
+uvicorn ..."` directly in the Docker Command field — failed in practice:
+Render didn't pass that string through a real shell, and the whole thing got
+tokenized as one literal (unfindable) command
+(`sh: 1: alembic upgrade head && uvicorn ...: not found`). `backend/scripts/render-start.sh`
+(checked into the repo, copied into the image by the Dockerfile's `COPY . .`)
+holds the actual `alembic upgrade head && exec uvicorn ...` logic instead, so
+the Docker Command field only has to hold something too simple to
+mis-parse. `alembic upgrade head` is idempotent (a no-op check if nothing's
+changed), so running it on every boot rather than only before a deploy costs
+nothing, and the script exits on migration failure before ever starting
+uvicorn (`set -e`).
 
 Two things that aren't optional:
 
