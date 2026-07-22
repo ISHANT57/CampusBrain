@@ -31,8 +31,16 @@ infrastructure is the only option.
 |---|---|
 | Root Directory | `backend` |
 | Runtime | Docker (uses `backend/Dockerfile`) |
-| Docker Command *(Settings → Advanced, NOT "Start Command" — that field is for native-runtime services and does nothing for a Docker-runtime one)* | `uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 4` |
-| Pre-Deploy Command | `alembic upgrade head` |
+| Docker Command *(Settings → Advanced, NOT "Start Command" — that field is for native-runtime services and does nothing for a Docker-runtime one)* | `sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 4"` |
+
+**Pre-Deploy Command would be the clean way to run migrations, but it's a
+paid-plan feature — confirmed unavailable on Render's free tier.** The
+`sh -c "... && ..."` chain above is the free-tier equivalent: Render's own
+docs document this exact multi-command pattern for the Docker Command field,
+which has no tier restriction. `alembic upgrade head` is idempotent (a no-op
+check if nothing's changed), so running it on every boot rather than only
+before a deploy costs nothing, and `&&` means uvicorn never starts against a
+schema migrations just failed to apply.
 
 Two things that aren't optional:
 
@@ -44,9 +52,9 @@ Two things that aren't optional:
   field blank, Render silently runs the Dockerfile's dev `CMD` instead — it
   won't error, it'll just quietly serve the wrong thing, exactly as happened
   on the first deploy.
-- **Pre-Deploy Command runs `alembic upgrade head` before each deploy** —
-  Render's mechanism for exactly this (not a cron job, not manual). Without
-  it, a deploy with a new migration serves against a stale schema.
+- **Don't rely on Render's Shell tab as a one-off migration workaround** —
+  SSH/shell access also appears to be paid-tier only. The Docker Command
+  chain above is the actual free-tier path, not a manual per-deploy step.
 
 **Environment variables** (Render dashboard → Environment):
 
