@@ -41,19 +41,22 @@ export function EmptyState({ onAsk }: { onAsk: (text: string) => void }) {
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.04, duration: 0.32, ease }}
-        className="mt-6 text-[28px] font-[650] leading-[1.2] tracking-[-0.025em] text-ink sm:text-[32px]"
+        className="mt-6 text-balance text-[28px] font-[650] leading-[1.2] tracking-[-0.025em] text-ink sm:text-[32px]"
       >
-        What would you like to know?
+        Every question about Sitare,
+        {/* Only break the line once there's room for it to read as two
+            deliberate lines; on narrow screens it wraps naturally instead. */}
+        <br className="hidden sm:inline" /> answered with its sources.
       </motion.h2>
 
       <motion.p
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.08, duration: 0.32, ease }}
-        className="mt-3 max-w-[460px] text-[15px] leading-[1.6] text-muted"
+        className="mt-3 max-w-[560px] text-[15px] leading-[1.6] text-muted"
       >
-        Ask about admissions, the scholarship, coursework, or life on campus. Every answer cites its
-        sources.
+        Admissions, the full scholarship, curriculum, campus life. Ask in plain language and get a
+        cited answer in seconds — not a PDF hunt.
       </motion.p>
 
       <div className="mt-10 grid w-full gap-2 text-left sm:grid-cols-2">
