@@ -22,6 +22,13 @@ services:
     volumes:
       - ../backend:/app
       - paddleocr_models:/root/.paddleocr
+      # Read-only, and only in the dev stack: lets tools/ingest.py run inside
+      # this container, which is the one place that already has libmagic,
+      # unstructured and paddleocr installed. Not in docker-compose.prod.yml —
+      # ingestion is an operator task, not something the deployed app does.
+      #   docker compose exec backend python /tools/ingest.py /resources
+      - ../tools:/tools:ro
+      - ../resources:/resources:ro
     depends_on:
       postgres:
         condition: service_healthy

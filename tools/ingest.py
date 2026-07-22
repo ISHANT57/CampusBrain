@@ -40,25 +40,28 @@ import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 
-# Import the app package the same way the backend does (app.*), by putting
-# backend/ on the path. Done before any app import below.
-BACKEND = Path(__file__).resolve().parent.parent / "backend"
+# Make the app package importable as `app.*`, from either place this runs:
+# the repo checkout (backend/ is a sibling of tools/), or inside the backend
+# container (the app is at /app and tools/ is mounted separately).
+_repo_backend = Path(__file__).resolve().parent.parent / "backend"
+BACKEND = _repo_backend if (_repo_backend / "app").is_dir() else Path("/app")
 sys.path.insert(0, str(BACKEND))
 
-# Load backend/.env so this tool talks to the same Neon/Qdrant/Gemini as the
-# app. Without this, Settings() would only see the ambient shell environment
-# and fail on the required fields.
-try:
-    from dotenv import load_dotenv
+# Load backend/.env so this talks to the same Neon/Qdrant/Gemini as the app.
+# Silently skipped when there's no .env — in the container, docker-compose's
+# env_file has already put these in the real environment, and on Render they
+# come from the dashboard, so a missing file is normal, not an error.
+_env_path = BACKEND / ".env"
+if _env_path.exists():
+    try:
+        from dotenv import load_dotenv
 
-    load_dotenv(BACKEND / ".env")
-except ImportError:
-    # python-dotenv isn't a backend dependency (the app gets its env from
-    # Docker/Render). Fall back to a minimal parser rather than making the
-    # whole tool depend on it.
-    env_path = BACKEND / ".env"
-    if env_path.exists():
-        for line in env_path.read_text(encoding="utf-8").splitlines():
+        load_dotenv(_env_path)
+    except ImportError:
+        # python-dotenv isn't a backend dependency (the app gets its env from
+        # Docker/Render). Minimal fallback parser rather than adding a
+        # dependency just for this tool.
+        for line in _env_path.read_text(encoding="utf-8").splitlines():
             line = line.strip()
             if not line or line.startswith("#") or "=" not in line:
                 continue
@@ -114,7 +117,9 @@ def progress(done: int, total: int, label: str, width: int = 28) -> None:
     sys.stdout.flush()
 
 
-def ingest_file(db, path: Path, org_id: int, reindex: bool, upload_blobs: bool) -> tuple[str, int]:
+def ingest_file(
+    db, path: Path, root: Path, org_id: int, reindex: bool, upload_blobs: bool
+) -> tuple[str, int]:
     """Returns (outcome, chunk_count) where outcome is indexed/skipped/failed.
     Raises nothing — failures come back as ('failed', 0) with the caller
     logging the message, so one bad file never aborts a 500-file run."""
@@ -156,10 +161,20 @@ def ingest_file(db, path: Path, org_id: int, reindex: bool, upload_blobs: bool) 
             storage_key = f"{org_id}/{uuid.uuid4()}{path.suffix.lower()}"
             object_storage.put_object(storage_key, content, content_type=mime_type)
 
+        # Relative path, not just the bare name: this is what the citation
+        # renderer shows (schemas.answer.Citation.filename), so storing
+        # "handbook/admissions/fees.pdf" rather than "fees.pdf" means an
+        # answer's citation carries the folder structure the document came
+        # from. Done here rather than by adding a source_path column so the
+        # Citation/DocumentRead schemas — i.e. the public API shape — stay
+        # exactly as they are. Forward slashes always, so citations read the
+        # same regardless of which OS ran the ingest.
+        relative = path.relative_to(root).as_posix()
+
         document = Document(
             org_id=org_id,
             collection_id=None,
-            filename=path.name,
+            filename=relative,
             mime_type=mime_type,
             size_bytes=len(content),
             status=DocumentStatus.PENDING,
@@ -245,7 +260,7 @@ def main() -> int:
             progress(i - 1, len(files), path.name)
             try:
                 outcome, chunks = ingest_file(
-                    db, path, args.org_id, args.reindex, args.upload_blobs
+                    db, path, args.folder, args.org_id, args.reindex, args.upload_blobs
                 )
             except Exception as e:  # noqa: BLE001 — one bad file must not end the run
                 db.rollback()
