@@ -50,8 +50,17 @@ services:
     build: ../frontend
     ports:
       - "5173:5173"
+    environment:
+      # Passed through from the host shell (set by Codespaces, empty locally).
+      # vite.config.ts uses it to point the HMR socket at the forwarded URL.
+      - CODESPACE_NAME
     volumes:
       - ../frontend:/app
+      # Anonymous volume so the container keeps its own node_modules instead of
+      # having the host's (absent, or built for another OS) shadow it via the
+      # bind mount above. Caveat: compose REUSES this volume on recreate, so
+      # after changing package.json rebuild with `-V` to renew it:
+      #   docker compose up -d --build -V frontend
       - /app/node_modules
     depends_on:
       - backend
