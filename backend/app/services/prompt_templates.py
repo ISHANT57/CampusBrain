@@ -32,7 +32,22 @@ def build_rag_prompt(question: str, hits: list[dict], history: list[dict] | None
         "Counting, totalling or listing entries that the context states is part "
         "of answering from the context, not going beyond it. If the context "
         "lists the things asked about, count them and say how many were listed "
-        "rather than refusing.\n\n"
+        "rather than refusing.\n"
+        # The corpus repeats the same facts across documents — a student can
+        # appear in a placements table, a success-stories paragraph and an
+        # interns list. Without this the same person gets counted once per
+        # document they appear in, and the total is inflated.
+        "The same person or item often appears in several of the numbered "
+        "documents; count each one ONCE, no matter how many documents mention "
+        "it.\n"
+        # Observed: "there are 6 students: 1. …8. … Wait, counting the names
+        # again … that makes a total of 8." Correct final number, arrived at in
+        # front of the user. Counting across a dozen chunks is exactly where
+        # the model wants to think aloud, so the answer has to be the
+        # conclusion only.
+        "Work out any count before you begin writing. Give only the final "
+        "answer — never narrate your counting, and never correct yourself "
+        "mid-answer.\n\n"
         f"{history_block}"
         f"Context:\n{context}\n\n"
         f"Question: {question}\n\n"
