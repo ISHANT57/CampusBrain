@@ -47,6 +47,13 @@ class Settings(BaseSettings):
     gemini_api_key: str = ""
     embedding_model: str = "gemini-embedding-001"
     embedding_dim: int = 768
+    # Answer generation, same key. Deliberately NOT reusing llm_model below:
+    # that one holds an OpenRouter model id ("openai/gpt-oss-20b:free") in
+    # every existing deploy's environment, and reusing the name would have
+    # meant every one of them sending an OpenRouter id to Gemini until someone
+    # remembered to change it. A separate var makes the switch a code deploy
+    # with nothing to update by hand.
+    gemini_llm_model: str = "gemini-3.5-flash-lite"
 
     # Discrete host/port — self-hosted Qdrant (dev, or the VPS path), no auth.
     qdrant_host: str = "qdrant"
@@ -58,9 +65,9 @@ class Settings(BaseSettings):
     qdrant_url: str | None = None
     qdrant_api_key: str = ""
 
+    # Only read when get_llm_provider() returns OpenRouterProvider, which it
+    # no longer does by default — its free tier caps at 50 requests per DAY.
     openrouter_api_key: str = ""
-    # Change LLM_MODEL in .env to try other OpenRouter models. Default is a
-    # free-tier model to avoid unexpected cost.
     llm_model: str = "openai/gpt-oss-20b:free"
 
     # Comma-separated list, e.g. "https://your-app.vercel.app,http://localhost:5173".
