@@ -4,27 +4,30 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.core.dependencies import require_role
-from app.models.user import User, UserRole
+from app.core.dependencies import require_search_access
 from app.schemas.search import SearchRequest, SearchResponse
 from app.services.retrieval_service import hybrid_search, keyword_search, semantic_search
 
 router = APIRouter(prefix="/search", tags=["search"])
 
 
-# Admin-only: this returns raw document chunks, which is a knowledge-base
-# inspection tool, not something students need — they get grounded answers
-# through /chat. Students have no accounts at all, so anything left
-# authenticated is admin-only by construction.
+# Returns raw document chunks — a knowledge-base inspection tool, not something
+# students need (they get grounded answers through /chat). Two callers are
+# permitted, both privileged:
+#
+#   admin JWT   a human inspecting the corpus through the admin UI
+#   X-API-Key   a machine doing read-only retrieval (the agent runtime)
+#
+# The API-key path is off unless SERVICE_API_KEY is set, and it is wired to
+# this endpoint ONLY — a service key cannot upload documents or read /auth.
 @router.post("", response_model=SearchResponse)
 def search(
     payload: SearchRequest,
-    current_user: User = Depends(require_role(UserRole.ADMIN, UserRole.SUPER_ADMIN)),
+    org_id: int = Depends(require_search_access),
     db: Session = Depends(get_db),
 ):
-    # org_id comes from the token, never the request — a caller can only ever
-    # search their own organization's chunks.
-    org_id = current_user.org_id
+    # org_id still comes from the credential, never the request body — a
+    # caller can only ever search the organization its credential resolves to.
     if payload.mode == "semantic":
         hits = semantic_search(org_id, payload.query, payload.top_k)
     elif payload.mode == "keyword":

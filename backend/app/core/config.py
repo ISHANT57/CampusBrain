@@ -27,6 +27,24 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 60
 
+    # Machine-to-machine credential for read-only retrieval (/search only).
+    #
+    # Why this exists separately from JWT auth: the only credential this API
+    # had was a human admin's email+password exchanged for a 60-minute token.
+    # A service calling /search would have to store that password, re-login
+    # hourly against a 5/min rate limiter, and would incidentally hold
+    # document-UPLOAD rights it has no use for. Those are three different
+    # problems, and all three come from using a human credential for a machine.
+    #
+    # Unset by default, which means the feature is OFF and existing deploys are
+    # completely unaffected. Generate with: python -c "import secrets;
+    # print(secrets.token_urlsafe(32))"
+    service_api_key: str = ""
+    # Which organization a service key resolves to. Single-institution deploys
+    # keep the default; this is the seam where a real key->org mapping goes if
+    # more than one ever needs machine access.
+    service_api_key_org_id: int = 1
+
     # Object storage — Supabase Storage's S3-compatible API in every
     # environment now (no more self-hosted MinIO container anywhere,
     # including dev; see backend/MIGRATION.md). storage_endpoint is the full
