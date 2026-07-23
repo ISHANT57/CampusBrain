@@ -83,6 +83,24 @@ class Settings(BaseSettings):
     qdrant_url: str | None = None
     qdrant_api_key: str = ""
 
+    # Reranking. Optional — unset means retrieval behaves exactly as before,
+    # ordering purely by Reciprocal Rank Fusion.
+    #
+    # Worth having because the two retrieval arms rank on different, and
+    # individually weak, evidence: embedding similarity across this corpus is
+    # flat (every chunk scores 0.62-0.68 against a typical question, so the
+    # ordering barely discriminates), and ts_rank has no IDF at all. A
+    # cross-encoder reads the question and the chunk together and can tell
+    # "lists three students at KlearNow" from "mentions KlearNow in a list of
+    # 30 partners" — which neither arm can.
+    #
+    # v3 over v2-base-multilingual on measurement, not preference: ~0.4s vs
+    # 1.4-6.2s, and it scores irrelevant chunks NEGATIVE (-0.12) rather than
+    # merely lower (0.06), which makes the numbers interpretable.
+    # Key: https://jina.ai/reranker (free tier).
+    jina_api_key: str = ""
+    rerank_model: str = "jina-reranker-v3"
+
     # Only read when get_llm_provider() returns OpenRouterProvider, which it
     # no longer does by default — its free tier caps at 50 requests per DAY.
     openrouter_api_key: str = ""
