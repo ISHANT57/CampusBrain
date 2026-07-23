@@ -5,10 +5,17 @@ from sqlalchemy.orm import Session
 
 from app.infrastructure import vector_store
 from app.infrastructure.embeddings.provider import get_embedding_provider
+from app.infrastructure.reranker import rerank
 
 # Reciprocal Rank Fusion constant. 60 is the value from the original RRF paper
 # and the de-facto default; it damps the influence of any single ranking.
 RRF_K = 60
+
+# How many fused candidates get reranked. Matches what the two arms already
+# over-fetch, so this costs an API call rather than extra retrieval. Raising it
+# widens the net the cross-encoder can rescue a buried chunk from, at a linear
+# cost in rerank tokens — 20 chunks is roughly 5k tokens per question.
+RERANK_CANDIDATES = 20
 
 
 def semantic_search(org_id: int, query: str, top_k: int = 5) -> list[dict]:
@@ -138,12 +145,19 @@ def keyword_search(db: Session, org_id: int, query: str, top_k: int = 5) -> list
 
 
 def hybrid_search(db: Session, org_id: int, query: str, top_k: int = 5) -> list[dict]:
-    """Reciprocal Rank Fusion of semantic + keyword results.
+    """Reciprocal Rank Fusion of semantic + keyword results, then a rerank.
 
     RRF fuses on *rank position*, not raw score — deliberate, because cosine
     similarity (0-1) and ts_rank (unbounded) aren't comparable numbers. Each
     list contributes 1/(K + rank) per chunk, so agreeing on a chunk beats
     ranking it first in only one list.
+
+    Fusion decides which chunks are candidates; the reranker decides which of
+    them actually answer the question. Both retrieval arms rank on evidence
+    that is individually weak — embedding similarity is nearly flat across
+    this corpus, and ts_rank has no IDF — whereas a cross-encoder reads the
+    question and the chunk together. When no reranker is configured or the
+    call fails, the fused order stands and behaviour is unchanged.
     """
     # Over-fetch from each source so fusion has candidates to work with.
     fetch = max(top_k * 4, 20)
@@ -161,4 +175,17 @@ def hybrid_search(db: Session, org_id: int, query: str, top_k: int = 5) -> list[
                 # comparable — thresholding on them would refuse everything.
                 entry["semantic_score"] = hit["score"]
 
-    return sorted(fused.values(), key=lambda h: h["score"], reverse=True)[:top_k]
+    ranked = sorted(fused.values(), key=lambda h: h["score"], reverse=True)
+
+    # Rerank the candidates fusion surfaced, not the whole corpus — a
+    # cross-encoder has to read every pair, so its cost is linear in what it's
+    # given. RERANK_CANDIDATES is what the two arms already over-fetched.
+    candidates = ranked[:RERANK_CANDIDATES]
+    scores = rerank(query, [hit["text"] for hit in candidates])
+    if scores is None:
+        return ranked[:top_k]
+
+    for hit, score in zip(candidates, scores):
+        hit["rerank_score"] = score
+    candidates.sort(key=lambda h: h["rerank_score"], reverse=True)
+    return candidates[:top_k]
