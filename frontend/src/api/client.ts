@@ -48,6 +48,14 @@ export const api = {
   // Public — no token needed. The backend keeps no transcript for anonymous
   // students, so prior turns travel with the question (the sidebar was
   // already localStorage-only; this just forwards what it holds).
-  chat: (question: string, history: ChatTurn[]) =>
-    request("/chat", { method: "POST", body: JSON.stringify({ question, history }) }),
+  //
+  // orgSlug picks which organization's documents are searched, and must match
+  // an organizations.slug row — the backend 404s otherwise. It is a path
+  // segment rather than a body field so each tenant's chatbot has its own URL
+  // end to end, browser address bar through to server log.
+  chat: (orgSlug: string, question: string, history: ChatTurn[]) =>
+    request(`/chat/${encodeURIComponent(orgSlug)}`, {
+      method: "POST",
+      body: JSON.stringify({ question, history }),
+    }),
 };

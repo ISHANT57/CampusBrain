@@ -2,7 +2,10 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { api, type ChatTurn } from '../../api/client'
 import type { ChatMessage, Conversation } from './types'
 
-const STORE = 'cb-chat-conversations'
+// Per organization, not one shared key: each tenant is its own chatbot, so a
+// visitor who uses two of them must not see one's history in the other's
+// sidebar — the threads cite different corpora and would be nonsense mixed.
+const storeKey = (orgSlug: string) => `cb-chat-conversations:${orgSlug}`
 // Mirrors MAX_HISTORY_TURNS / the per-turn max_length in
 // backend/app/schemas/chat.py — the server rejects (422) anything past these,
 // so trim here rather than let a long chat start failing to send.
@@ -15,9 +18,9 @@ const titleFrom = (text: string) => (text.length > 46 ? text.slice(0, 46).trimEn
 // anonymously, so the backend stores no transcript at all. Clearing site data
 // clears the chats. That's the trade for zero-friction access — if history
 // needs to survive a browser wipe, it needs an account to hang off.
-function load(): Conversation[] {
+function load(orgSlug: string): Conversation[] {
   try {
-    const raw = JSON.parse(localStorage.getItem(STORE) || 'null')
+    const raw = JSON.parse(localStorage.getItem(storeKey(orgSlug)) || 'null')
     if (!Array.isArray(raw)) return []
     // A message can be persisted mid-flight (refresh, crash, dropped
     // connection) and never finish — resurrect it as "stopped", not a
@@ -33,14 +36,26 @@ function load(): Conversation[] {
   }
 }
 
-export function useChat() {
-  const [conversations, setConversations] = useState<Conversation[]>(load)
-  const [activeLocalId, setActiveLocalId] = useState<string | null>(() => load()[0]?.localId ?? null)
+export function useChat(orgSlug: string) {
+  const [conversations, setConversations] = useState<Conversation[]>(() => load(orgSlug))
+  const [activeLocalId, setActiveLocalId] = useState<string | null>(
+    () => load(orgSlug)[0]?.localId ?? null,
+  )
   const timers = useRef<Array<ReturnType<typeof setTimeout>>>([])
 
+  // Switching tenants swaps the whole thread list. Without this the state
+  // initialised for the first org would persist and then be written back
+  // under the second org's key, silently copying one tenant's history onto
+  // the other.
   useEffect(() => {
-    localStorage.setItem(STORE, JSON.stringify(conversations.slice(0, 50)))
-  }, [conversations])
+    const next = load(orgSlug)
+    setConversations(next)
+    setActiveLocalId(next[0]?.localId ?? null)
+  }, [orgSlug])
+
+  useEffect(() => {
+    localStorage.setItem(storeKey(orgSlug), JSON.stringify(conversations.slice(0, 50)))
+  }, [conversations, orgSlug])
 
   const active = conversations.find((c) => c.localId === activeLocalId) ?? null
   const messages = active?.messages ?? []
@@ -150,14 +165,14 @@ export function useChat() {
       if (!activeLocalId) setActiveLocalId(localId)
 
       try {
-        const res = await api.chat(q, history)
+        const res = await api.chat(orgSlug, q, history)
         patch(localId, replyId, { phase: 'revealing', citations: res.citations ?? [] })
         reveal(localId, replyId, res.answer)
       } catch (err) {
         patch(localId, replyId, { phase: 'error', content: (err as Error).message })
       }
     },
-    [activeLocalId, active, patch, reveal],
+    [activeLocalId, active, patch, reveal, orgSlug],
   )
 
   const newChat = useCallback(() => {
