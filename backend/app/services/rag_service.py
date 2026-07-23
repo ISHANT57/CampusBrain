@@ -11,7 +11,11 @@ from app.services.retrieval_service import hybrid_search
 # out-of-corpus and refuse rather than let the model answer ungrounded (M39).
 RELEVANCE_THRESHOLD = 0.35
 
-CITATION_MARKER = re.compile(r"\[(\d+)\]")
+# Matches a single marker "[3]" and a grouped one "[1, 2, 4]" alike. Models
+# group markers whenever a claim rests on several chunks, and matching only
+# the single form meant those answers surfaced NO sources at all — the sources
+# panel was empty under exactly the best-evidenced answers.
+CITATION_MARKER = re.compile(r"\[\s*(\d+(?:\s*,\s*\d+)*)\s*\]")
 
 
 def keep_cited_sources(answer: str, hits: list[dict]) -> tuple[str, list[dict]]:
@@ -28,13 +32,19 @@ def keep_cited_sources(answer: str, hits: list[dict]) -> tuple[str, list[dict]]:
     Markers are renumbered to stay contiguous: if the model cites [2] and [4],
     the user sees sources 1 and 2, not 2 and 4 with gaps that read as missing
     items. A marker pointing outside the retrieved set (a hallucinated [9]) is
-    dropped entirely rather than left dangling.
+    dropped entirely rather than left dangling. A grouped marker keeps only its
+    in-range numbers — "[2, 9]" becomes "[1]", not a dangling reference and not
+    a lost one.
     """
+
+    def numbers(match: re.Match) -> list[int]:
+        return [int(n) for n in match.group(1).split(",")]
+
     seen: list[int] = []
     for match in CITATION_MARKER.finditer(answer):
-        n = int(match.group(1))
-        if 1 <= n <= len(hits) and n not in seen:
-            seen.append(n)
+        for n in numbers(match):
+            if 1 <= n <= len(hits) and n not in seen:
+                seen.append(n)
 
     if not seen:
         # Strip any markers that survived — all of them are out of range, so
@@ -43,10 +53,12 @@ def keep_cited_sources(answer: str, hits: list[dict]) -> tuple[str, list[dict]]:
 
     seen.sort()
     renumber = {old: new for new, old in enumerate(seen, start=1)}
-    rewritten = CITATION_MARKER.sub(
-        lambda m: f"[{renumber[int(m.group(1))]}]" if int(m.group(1)) in renumber else "",
-        answer,
-    )
+
+    def rewrite(match: re.Match) -> str:
+        kept = [renumber[n] for n in numbers(match) if n in renumber]
+        return f"[{', '.join(str(n) for n in kept)}]" if kept else ""
+
+    rewritten = CITATION_MARKER.sub(rewrite, answer)
 
     citations = [
         {

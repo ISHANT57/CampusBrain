@@ -77,3 +77,19 @@ def test_zero_index_is_not_a_valid_source():
 @pytest.mark.parametrize("answer", ["", "No markers at all."])
 def test_answers_without_markers_have_no_sources(answer):
     assert keep_cited_sources(answer, HITS)[1] == []
+
+
+def test_grouped_marker_keeps_every_source():
+    """The model writes "[1, 2, 4]" whenever a claim rests on several chunks.
+    Matching only the single-number form dropped all of them, so the answers
+    resting on the most evidence were the ones that showed no sources."""
+    answer, citations = keep_cited_sources("Eight students [1, 3, 4].", HITS)
+    assert [c["document_id"] for c in citations] == [1, 3, 4]
+    assert answer == "Eight students [1, 2, 3]."
+
+
+def test_grouped_marker_drops_only_its_out_of_range_numbers():
+    """A hallucinated number inside a group must not take the real ones with it."""
+    answer, citations = keep_cited_sources("Mixed [2, 9].", HITS)
+    assert [c["document_id"] for c in citations] == [2]
+    assert answer == "Mixed [1]."
