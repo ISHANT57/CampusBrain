@@ -14,8 +14,18 @@ export function StarMark({ className }: { className?: string }) {
 }
 
 // One brand mark everywhere it appears (chat, admin) — `context` adds a small
-// suffix instead of every screen inventing its own name.
-export function Logo({ className, context }: { className?: string; context?: string }) {
+// suffix instead of every screen inventing its own name. `brand` carries the
+// tenant name; it defaults so the admin screens, which are org-agnostic until
+// you sign in, don't have to pass one.
+export function Logo({
+  className,
+  context,
+  brand = 'Ask Sitare',
+}: {
+  className?: string
+  context?: string
+  brand?: string
+}) {
   return (
     <span className={cn('inline-flex items-center gap-2.5', className)}>
       <span
@@ -25,7 +35,8 @@ export function Logo({ className, context }: { className?: string; context?: str
         <StarMark className="size-[15px]" />
       </span>
       <span className="text-[15px] font-[650] tracking-[-0.015em] text-ink">
-        Ask&nbsp;Sitare
+        {/* Non-breaking space so the two words never split across lines. */}
+        {brand.replace(/ /g, ' ')}
         {context && <span className="font-medium text-muted"> · {context}</span>}
       </span>
     </span>

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { Navigate, useParams } from 'react-router-dom'
 import { ArrowDown } from 'lucide-react'
 import { Button } from '../components/chat/ui/button'
 import { Composer, type ComposerHandle } from '../components/chat/Composer'
@@ -11,6 +12,7 @@ import { ShortcutsDialog } from '../components/chat/ShortcutsDialog'
 import { useChat } from '../components/chat/useChat'
 import { useMediaQuery } from '../components/chat/lib/utils'
 import { useTheme } from '../hooks/useTheme'
+import { DEFAULT_ORG_SLUG, getOrg, type Org } from '../orgs'
 
 // One reading column, shared by the thread and the composer so the two stay
 // optically aligned. ~820px keeps answer lines near the 75-character mark.
@@ -21,9 +23,22 @@ const isTyping = (el: Element | null) =>
 
 // portalTarget: the app-level .cb-scope element (see App.tsx) — Radix/cmdk
 // dialogs need it to portal into a themed element instead of document.body.
+//
+// Split in two so the unknown-slug redirect can happen before any hook runs:
+// bailing out of the component below would change the hook order between
+// renders, which React rejects.
 export default function Chat({ portalTarget }: { portalTarget: HTMLElement | null }) {
+  const { orgSlug } = useParams()
+  const org = getOrg(orgSlug)
+  if (!org) return <Navigate to={`/${DEFAULT_ORG_SLUG}`} replace />
+  // key: a tenant switch is a different chatbot with a different corpus and
+  // its own stored threads, so remount rather than reconcile.
+  return <ChatFor key={org.slug} org={org} portalTarget={portalTarget} />
+}
+
+function ChatFor({ org, portalTarget }: { org: Org; portalTarget: HTMLElement | null }) {
   const { dark, toggle: toggleTheme } = useTheme()
-  const chat = useChat()
+  const chat = useChat(org.slug)
   const desktop = useMediaQuery('(min-width: 900px)')
 
   const [sidebarOpen, setSidebarOpen] = useState(desktop)
@@ -127,7 +142,7 @@ export default function Chat({ portalTarget }: { portalTarget: HTMLElement | nul
       <div className="flex min-w-0 flex-1 flex-col">
         <Header
           title={chat.active?.title ?? 'New conversation'}
-          subtitle="Grounded in Sitare University documents"
+          subtitle={org.subtitle}
           sidebarOpen={sidebarOpen}
           onOpenSidebar={() => setSidebarOpen(true)}
           onOpenSearch={() => setPaletteOpen(true)}
@@ -142,12 +157,12 @@ export default function Chat({ portalTarget }: { portalTarget: HTMLElement | nul
           className="relative flex-1 overflow-y-auto"
         >
           {empty ? (
-            <EmptyState onAsk={chat.send} />
+            <EmptyState org={org} onAsk={chat.send} />
           ) : (
             <div className={`${COLUMN} py-8`}>
               <div className="mb-8 flex justify-center">
                 <span className="rounded-full border border-border bg-surface px-3.5 py-1.5 text-[12px] text-muted">
-                  Answers are drawn from Sitare University's documents
+                  Answers are drawn from {org.name}'s documents
                 </span>
               </div>
 
@@ -155,7 +170,7 @@ export default function Chat({ portalTarget }: { portalTarget: HTMLElement | nul
                   thread breaking into isolated blocks. */}
               <div className="flex flex-col gap-10">
                 {chat.messages.map((m) => (
-                  <Message key={m.id} message={m} onRetry={retry} />
+                  <Message key={m.id} message={m} brand={org.brand} onRetry={retry} />
                 ))}
               </div>
               <div className="h-4" />
@@ -193,7 +208,8 @@ export default function Chat({ portalTarget }: { portalTarget: HTMLElement | nul
               onSubmit={chat.send}
               onStop={chat.stop}
               streaming={chat.streaming}
-              placeholder={empty ? 'Ask anything about Sitare University…' : 'Ask a follow-up question…'}
+              orgName={org.name}
+              placeholder={empty ? `Ask anything about ${org.name}…` : 'Ask a follow-up question…'}
             />
             <p className="mt-3 text-center text-[11.5px] text-faint">
               Answers cite uploaded documents — verify anything critical against the source.

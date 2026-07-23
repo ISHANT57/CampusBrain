@@ -188,9 +188,12 @@ function Turn({ kind, name, children }: { kind: 'user' | 'assistant'; name: stri
 
 export const Message = memo(function Message({
   message,
+  brand,
   onRetry,
 }: {
   message: ChatMessage
+  /** Tenant's assistant name, shown above every answer. */
+  brand: string
   onRetry: () => void
 }) {
   const { role, content, phase, citations = [] } = message
@@ -207,7 +210,7 @@ export const Message = memo(function Message({
 
   if (phase === 'error') {
     return (
-      <Turn kind="assistant" name="Ask Sitare">
+      <Turn kind="assistant" name={brand}>
         <ErrorCard
           title="That answer didn't come through"
           description={content || 'Something went wrong reaching the assistant.'}
@@ -225,7 +228,7 @@ export const Message = memo(function Message({
   const searching = phase === 'searching'
 
   return (
-    <Turn kind="assistant" name="Ask Sitare">
+    <Turn kind="assistant" name={brand}>
       <SourceRail citations={citations} loading={searching} />
 
       {searching ? (

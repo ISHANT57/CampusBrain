@@ -17,8 +17,10 @@ export const Composer = forwardRef<
     onStop: () => void
     streaming: boolean
     placeholder?: string
+    /** Names the organization in the screen-reader label for the input. */
+    orgName?: string
   }
->(function Composer({ onSubmit, onStop, streaming, placeholder }, ref) {
+>(function Composer({ onSubmit, onStop, streaming, placeholder, orgName }, ref) {
   const [value, setValue] = useState('')
   const ta = useRef<HTMLTextAreaElement>(null)
 
@@ -50,7 +52,7 @@ export const Composer = forwardRef<
       className="group relative rounded-[var(--radius-composer)] border border-border bg-surface shadow-[var(--shadow-float)] transition-[border-color,box-shadow] duration-200 ease-out focus-within:border-accent focus-within:shadow-[0_0_0_4px_var(--accent-soft),var(--shadow-float)]"
     >
       <label htmlFor="cb-composer" className="sr-only">
-        Ask a question about Sitare University
+        Ask a question about {orgName ?? 'the knowledge base'}
       </label>
       <textarea
         id="cb-composer"

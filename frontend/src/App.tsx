@@ -9,6 +9,7 @@ import { ThemeToggle } from "./components/chat/ThemeToggle";
 import { Button } from "./components/chat/ui/button";
 import { Tooltip } from "./components/chat/ui/primitives";
 import { cn } from "./components/chat/lib/utils";
+import { DEFAULT_ORG_SLUG } from "./orgs";
 import AdminLogin from "./pages/AdminLogin";
 import Chat from "./pages/Chat";
 import Upload from "./pages/Upload";
@@ -92,13 +93,20 @@ export default function App() {
     <div ref={scopeRef} className={cn("cb-scope flex h-dvh flex-col overflow-hidden", dark && "dark")}>
       <Routes>
         {/* Public: no token, no account, no redirect — a student lands here
-            and can ask immediately. */}
-        <Route path="/" element={<Chat portalTarget={portalTarget} />} />
+            and can ask immediately. The slug picks which organization's
+            documents are searched (see src/orgs.ts); "/" sends visitors to
+            the default one so the bare domain keeps working. */}
+        <Route path="/" element={<Navigate to={`/${DEFAULT_ORG_SLUG}`} replace />} />
         <Route path="/admin/login" element={<AdminLogin />} />
         <Route element={<AdminRoute />}>
           <Route path="/admin" element={<Upload />} />
         </Route>
-        <Route path="*" element={<Navigate to="/" replace />} />
+        {/* Last among the real routes: a single dynamic segment would also
+            match "/admin", and React Router only prefers the static path
+            because it ranks static segments higher — the ordering here is
+            for readers, the ranking is what actually protects /admin. */}
+        <Route path="/:orgSlug" element={<Chat portalTarget={portalTarget} />} />
+        <Route path="*" element={<Navigate to={`/${DEFAULT_ORG_SLUG}`} replace />} />
       </Routes>
     </div>
   );
