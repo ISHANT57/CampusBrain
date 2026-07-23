@@ -1,7 +1,11 @@
+import logging
+
 # pyrefly: ignore [missing-import]
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 # pyrefly: ignore [missing-import]
 from fastapi.middleware.cors import CORSMiddleware
+# pyrefly: ignore [missing-import]
+from fastapi.responses import JSONResponse
 
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
@@ -21,6 +25,28 @@ app.include_router(auth_router, prefix="/api/v1")
 app.include_router(documents_router, prefix="/api/v1")
 app.include_router(search_router, prefix="/api/v1")
 app.include_router(chat_router, prefix="/api/v1")
+
+
+@app.middleware("http")
+async def unhandled_errors_keep_cors(request: Request, call_next):
+    """Turn an unhandled exception into a normal 500 response, here.
+
+    Starlette's own 500 handler sits OUTSIDE every middleware including CORS,
+    so an unhandled exception produced a bare `Internal Server Error` with no
+    `Access-Control-Allow-Origin` header. The browser then reported it as a
+    CORS failure and the frontend only ever saw "Failed to fetch" — which is
+    how an exhausted LLM quota spent an afternoon looking like a CORS bug.
+
+    Registered BEFORE add_middleware(CORSMiddleware) on purpose: the
+    last-added middleware is the outermost, so CORS wraps this one and gets to
+    stamp its headers on the response this returns.
+    """
+    try:
+        return await call_next(request)
+    except Exception:
+        logging.exception("Unhandled error on %s %s", request.method, request.url.path)
+        return JSONResponse(status_code=500, content={"detail": "Internal server error"})
+
 
 # CORS_ALLOWED_ORIGINS defaults to "*" for local dev (Vite dev server,
 # Codespaces forwarded URLs, arbitrary ports). A split-origin production
