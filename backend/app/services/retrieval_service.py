@@ -36,6 +36,22 @@ def semantic_search(org_id: int, query: str, top_k: int = 5) -> list[dict]:
     ]
 
 
+# A term in more than this share of the corpus is treated as noise and left
+# out of the tsquery. Postgres's english dictionary already drops true
+# stopwords ("how", "or", "at"), but not the words that are merely ubiquitous
+# in *this* corpus — "student" is in 66% of chunks of a college prospectus.
+#
+# Calibrated, not guessed, and worth re-measuring against a different corpus:
+# the thing this has to separate is a company name from the boilerplate around
+# it. Measured on the current 273 chunks — "klearnow" 5%, "job" 10%, "ai" 15%,
+# "currently" 23%, "internship" 27%, "students" 66%. 0.10 sits above every
+# proper noun and below every filler word, and moved the two chunks that
+# actually answer "how many students at klearnow" from unranked to 1st and
+# 7th. Too low is the dangerous direction: at 0.02 the company name itself
+# gets dropped and the arm returns nothing useful.
+COMMON_TERM_RATIO = 0.10
+
+
 def _to_or_tsquery(query: str) -> str:
     """Build an OR tsquery from free text.
 
@@ -48,10 +64,49 @@ def _to_or_tsquery(query: str) -> str:
     return " | ".join(terms)
 
 
+def _discriminating_terms(db: Session, org_id: int, terms: list[str]) -> list[str]:
+    """Drop the query terms that are too common in this corpus to rank on.
+
+    ts_rank has no IDF — it scores on how often a lexeme occurs *within* a
+    chunk and knows nothing about how many other chunks contain it. So in
+    "how many students are pursuing an internship at klearnow", `student`
+    (66% of chunks) and `klearnow` (4%) counted the same, and chunks stuffed
+    with the boilerplate words outranked the three that actually name the
+    company. Catching rare proper nouns is the entire reason this arm exists
+    alongside semantic search, so the common words have to go.
+
+    Falls back to every term when they're all common — for a question like
+    "what do students study", dropping them all would leave no query at all,
+    and the old behaviour is the right answer there.
+    """
+    rows = db.execute(
+        sql_text(
+            """
+            SELECT t.term,
+                   (SELECT count(*) FROM chunks c
+                     WHERE c.org_id = :org_id
+                       AND c.search_vector @@ plainto_tsquery('english', t.term)) AS ndoc,
+                   (SELECT count(*) FROM chunks c WHERE c.org_id = :org_id) AS total
+            FROM unnest(CAST(:terms AS text[])) AS t(term)
+            """
+        ),
+        {"terms": terms, "org_id": org_id},
+    ).mappings().all()
+
+    # plainto_tsquery stems each term the same way the indexed vector was
+    # stemmed, so "pursuing"/"students" are counted as "pursu"/"student"
+    # without this needing its own stemmer.
+    rare = [r["term"] for r in rows if r["ndoc"] <= r["total"] * COMMON_TERM_RATIO]
+    return rare or terms
+
+
 def keyword_search(db: Session, org_id: int, query: str, top_k: int = 5) -> list[dict]:
     """Postgres full-text search. Catches exact terms (course codes, acronyms,
     proper nouns) that embeddings blur together."""
-    tsquery = _to_or_tsquery(query)
+    terms = [t for t in re.split(r"\W+", query) if t]
+    if not terms:
+        return []
+    tsquery = _to_or_tsquery(" ".join(_discriminating_terms(db, org_id, terms)))
     if not tsquery:
         return []
 

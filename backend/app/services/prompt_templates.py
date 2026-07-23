@@ -23,6 +23,16 @@ def build_rag_prompt(question: str, hits: list[dict], history: list[dict] | None
         "inline with their number in square brackets, e.g. [1]. If the context does "
         "not contain the answer, say exactly: "
         f'"{NO_EVIDENCE_RESPONSE}"\n\n'
+        # Without this, "how many students went to KlearNow" was refused while
+        # "which students went to KlearNow" listed eight of them from the same
+        # chunk: the model read "ONLY the context" as forbidding any answer
+        # whose literal words aren't present, and the count isn't written down
+        # anywhere — it has to be counted off a table. Counting what the
+        # context states is reading it, not inferring beyond it.
+        "Counting, totalling or listing entries that the context states is part "
+        "of answering from the context, not going beyond it. If the context "
+        "lists the things asked about, count them and say how many were listed "
+        "rather than refusing.\n\n"
         f"{history_block}"
         f"Context:\n{context}\n\n"
         f"Question: {question}\n\n"
