@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CampusBrain — Production-Oriented AI Knowledge Platform</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#111827;
+    --muted:#6B7280;
+    --line:#E5E7EB;
+    --blue:#2563EB;
+    --blue-soft:#EFF4FF;
+    --teal:#14B8A6;
+    --teal-soft:#E6F8F6;
+    --bg:#FFFFFF;
+    --danger-soft:#FDF0F0;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{background:#0F172A;font-family:'Inter',-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;color:var(--ink)}
+  .deck{display:flex;flex-direction:column;align-items:center;gap:48px;padding:56px 0 80px}
+  .deck-title{color:#E2E8F0;text-align:center;max-width:720px}
+  .deck-title h1{font-size:26px;font-weight:700;letter-spacing:-.02em}
+  .deck-title p{color:#94A3B8;font-size:14px;margin-top:8px}
+
+  /* ---------- SLIDE BASE : 1200 x 675 ---------- */
+  .slide{
+    width:1200px;height:675px;background:var(--bg);position:relative;
+    overflow:hidden;box-shadow:0 30px 80px -20px rgba(2,6,23,.55);
+    padding:54px 72px 52px;display:flex;flex-direction:column;
+  }
+  .slide .index{position:absolute;top:30px;left:72px;font-size:12px;font-weight:700;letter-spacing:.14em;color:var(--blue)}
+  .slide .pageno{position:absolute;top:30px;right:72px;font-size:12px;font-weight:600;letter-spacing:.08em;color:#9CA3AF}
+  .slide .headline{font-size:44px;line-height:1.08;font-weight:800;letter-spacing:-.025em;margin-top:24px}
+  .slide .subtitle{font-size:18px;color:var(--muted);font-weight:500;margin-top:12px;letter-spacing:-.01em}
+  .footrule{position:absolute;left:72px;right:72px;bottom:34px;height:1px;background:var(--line)}
+  .foottxt{position:absolute;left:72px;right:72px;bottom:14px;display:flex;justify-content:space-between;font-size:11px;letter-spacing:.05em;color:#9CA3AF;font-weight:600}
+  .foottxt .dot{color:var(--teal)}
+
+  .node{background:var(--bg);border:1px solid var(--line);border-radius:9px;font-size:13px;font-weight:600;display:flex;align-items:center;justify-content:center;color:var(--ink)}
+  .node.teal{border-color:var(--teal);color:#0F766E}
+  .node.blue{border-color:var(--blue);color:var(--blue);background:var(--blue-soft)}
+  .node.ghost{border-style:dashed;color:var(--muted);font-weight:500}
+
+  .kicker{font-size:11px;font-weight:700;letter-spacing:.16em;color:var(--blue);text-transform:uppercase}
+  .kicker.teal{color:#0F766E}
+  .legend{display:flex;gap:18px;font-size:11.5px;color:var(--muted)}
+  .legend .li{display:flex;align-items:center;gap:7px}
+  .sw{width:12px;height:12px;border-radius:3px;display:inline-block}
+
+  /* ---------- ICONS ---------- */
+  .ic{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;flex:none}
+  .ic.sm{width:17px;height:17px}
+
+  /* ---------- SLIDE 1 : COVER ---------- */
+  .cover .headline{font-size:58px;font-weight:800;letter-spacing:-.03em;line-height:1.04;margin-top:26px}
+  .cover .sub2{font-size:22px;font-weight:700;letter-spacing:-.015em;margin-top:14px}
+  .cover .sub2 .accent{color:var(--blue)}
+  .cover .hero{flex:1;position:relative;margin-top:20px;min-height:0}
+  .cover .hero svg{width:100%;height:auto;max-height:300px;display:block}
+
+  /* ---------- TRADE-OFF TABLE ---------- */
+  .trows{flex:1;display:flex;flex-direction:column;gap:9px;margin-top:18px}
+  .trow{display:grid;grid-template-columns:34px 1.15fr 1.25fr 1.05fr 1.15fr;gap:16px;align-items:start;border:1px solid var(--line);border-radius:10px;padding:12px 16px}
+  .trow .tno{font-size:16px;font-weight:800;color:var(--teal);padding-top:2px}
+  .trow .cell .lab{font-size:10px;font-weight:700;letter-spacing:.1em;color:#9CA3AF;text-transform:uppercase;margin-bottom:4px}
+  .trow .cell p{font-size:12.5px;line-height:1.4;color:#374151}
+  .trow .cell p b{color:var(--ink)}
+
+  /* ---------- CONCEPT GRID ---------- */
+  .concepts{flex:1;display:grid;grid-template-columns:repeat(5,1fr);grid-template-rows:repeat(3,1fr);gap:14px;margin-top:20px}
+  .concept{border:1px solid var(--line);border-radius:10px;padding:14px;display:flex;flex-direction:column;justify-content:flex-start}
+  .concept .ic{color:var(--blue);margin-bottom:9px}
+  .concept .cn{font-size:13.5px;font-weight:700;letter-spacing:-.01em}
+  .concept .cw{font-size:11.5px;color:var(--muted);line-height:1.42;margin-top:4px}
+  .concept.reject{border-color:var(--teal);background:var(--teal-soft)}
+  .concept.reject .cn{color:#0F766E}
+  .concept.reject .ic{color:var(--teal)}
+
+  /* ---------- DECISION CARDS ---------- */
+  .decisions{flex:1;display:grid;grid-template-columns:repeat(2,1fr);grid-template-rows:repeat(5,1fr);gap:11px;margin-top:16px}
+  .decision{display:flex;align-items:flex-start;gap:12px;border:1px solid var(--line);border-radius:11px;padding:12px 14px;border-left:3px solid var(--blue)}
+  .decision:nth-child(even){border-left-color:var(--teal)}
+  .decision .ic{color:var(--blue);margin-top:1px}
+  .decision:nth-child(even) .ic{color:var(--teal)}
+  .decision .dn{font-size:13.5px;font-weight:700;letter-spacing:-.01em;line-height:1.25}
+  .decision .dw{font-size:11.5px;color:var(--muted);line-height:1.42;margin-top:4px}
+
+  /* ---------- FAILURE TABLE ---------- */
+  .failures{flex:1;display:flex;flex-direction:column;gap:9px}
+  .failrow{display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:stretch}
+  .failcell{border-radius:9px;padding:11px 14px;font-size:12.5px;line-height:1.4}
+  .failcell.f{background:var(--danger-soft);color:#7F1D1D;border:1px solid #F4C7C7}
+  .failcell.r{background:var(--teal-soft);color:#0F766E;border:1px solid #B7E8E1}
+  .failcell .fl{font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;margin-bottom:3px;opacity:.75}
+
+  /* ---------- SCALING TIMELINE ---------- */
+  .scale{flex:1;display:flex;align-items:flex-end;gap:20px;margin-top:16px}
+  .stage{flex:1;border-top:2px solid var(--blue);position:relative}
+  .stage .cnt{font-size:26px;font-weight:800;letter-spacing:-.03em;margin-top:10px}
+  .stage .cnt small{font-size:13px;color:var(--muted);font-weight:600}
+  .stage .sl{font-size:10.5px;color:var(--muted);font-weight:600;letter-spacing:.02em;margin-top:6px}
+  .stage .sb{font-size:11px;color:#374151;line-height:1.45;margin-top:3px}
+  .stage .dot{position:absolute;top:-7px;left:0;width:12px;height:12px;border-radius:50%;background:var(--blue)}
+  .stage:last-child .dot{background:var(--teal)}
+
+  @media print{
+    @page{size:1200px 675px;margin:0}
+    html,body{background:#fff}
+    .deck{padding:0;gap:0;background:#fff}
+    .deck-title{display:none}
+    .slide{box-shadow:none;page-break-after:always;page-break-inside:avoid}
+  }
+</style>
+</head>
+<body>
+
+<!-- ICON SPRITE -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="ic-shield" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></symbol>
+    <symbol id="ic-db" viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></symbol>
+    <symbol id="ic-zap" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></symbol>
+    <symbol id="ic-wifi" viewBox="0 0 24 24"><path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></symbol>
+    <symbol id="ic-file" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></symbol>
+    <symbol id="ic-pulse" viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></symbol>
+    <symbol id="ic-hash" viewBox="0 0 24 24"><line x1="4" y1="9" x2="20" y2="9"/><line x1="4" y1="15" x2="20" y2="15"/><line x1="10" y1="3" x2="8" y2="21"/><line x1="16" y1="3" x2="14" y2="21"/></symbol>
+    <symbol id="ic-refresh" viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></symbol>
+    <symbol id="ic-gauge" viewBox="0 0 24 24"><path d="M4 16a8 8 0 0 1 16 0"/><path d="M12 16l4-4"/><path d="M12 16v-2"/><circle cx="12" cy="16" r="1.3"/></symbol>
+    <symbol id="ic-branch" viewBox="0 0 24 24"><line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></symbol>
+    <symbol id="ic-share" viewBox="0 0 24 24"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></symbol>
+    <symbol id="ic-eye" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></symbol>
+    <symbol id="ic-list" viewBox="0 0 24 24"><line x1="9" y1="6" x2="21" y2="6"/><line x1="9" y1="12" x2="21" y2="12"/><line x1="9" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></symbol>
+    <symbol id="ic-key" viewBox="0 0 24 24"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></symbol>
+    <symbol id="ic-users" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></symbol>
+    <symbol id="ic-layers" viewBox="0 0 24 24"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></symbol>
+    <symbol id="ic-filter" viewBox="0 0 24 24"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></symbol>
+    <symbol id="ic-target" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></symbol>
+    <symbol id="ic-dollar" viewBox="0 0 24 24"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></symbol>
+    <symbol id="ic-cog" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v2.2M12 19.8V22M4.9 4.9l1.6 1.6M17.5 17.5l1.6 1.6M2 12h2.2M19.8 12H22M4.9 19.1l1.6-1.6M17.5 6.5l1.6-1.6"/></symbol>
+    <symbol id="ic-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></symbol>
+    <symbol id="ic-book" viewBox="0 0 24 24"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></symbol>
+    <symbol id="ic-flag" viewBox="0 0 24 24"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></symbol>
+    <symbol id="ic-trend" viewBox="0 0 24 24"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></symbol>
+    <symbol id="ic-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></symbol>
+  </defs>
+</svg>
+
+<div class="deck">
+<div class="deck-title">
+  <h1>CampusBrain — LinkedIn Carousel</h1>
+  <p>10 slides · 1200 × 675 (16:9) · open in a browser → Print to PDF (each slide = one page), or screenshot each slide at 2×.</p>
+</div>
+
+<!-- ============ SLIDE 1 : COVER ============ -->
+<section class="slide cover">
+  <div class="index">CASE STUDY · SYSTEM DESIGN · 2026</div>
+  <div class="pageno">01 / 10</div>
+  <div class="headline">
+    I didn't build another<br>RAG chatbot.
+  </div>
+  <div class="sub2">I built a <span class="accent">production-oriented</span> AI knowledge platform.</div>
+  <div class="hero">
+    <svg viewBox="0 0 1056 360" preserveAspectRatio="xMidYMid meet">
+      <defs>
+        <linearGradient id="gTeal" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0" stop-color="#14B8A6"/><stop offset="1" stop-color="#0EA5A9"/>
+        </linearGradient>
+        <marker id="arw" markerWidth="8" markerHeight="8" refX="4" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z" fill="#C7CDD6"/></marker>
+      </defs>
+      <!-- tier 1 : ingest -->
+      <rect x="20" y="16" width="1016" height="92" rx="14" fill="#FAFAFB" stroke="#E5E7EB"/>
+      <text x="44" y="66" font-size="13" font-weight="700" fill="#9CA3AF" font-family="Inter, sans-serif">INGEST</text>
+      <rect x="140" y="38" width="210" height="50" rx="9" fill="#fff" stroke="#E5E7EB"/>
+      <text x="245" y="69" font-size="14" font-weight="600" fill="#111827" text-anchor="middle" font-family="Inter">Upload · Validate</text>
+      <rect x="390" y="38" width="210" height="50" rx="9" fill="#fff" stroke="#E5E7EB"/>
+      <text x="495" y="69" font-size="14" font-weight="600" fill="#111827" text-anchor="middle" font-family="Inter">Durable Queue</text>
+      <rect x="640" y="38" width="210" height="50" rx="9" fill="#fff" stroke="#E5E7EB"/>
+      <text x="745" y="69" font-size="14" font-weight="600" fill="#111827" text-anchor="middle" font-family="Inter">Background Worker</text>
+      <text x="875" y="70" font-size="14" font-weight="500" fill="#9CA3AF" font-family="Inter">→</text>
+      <rect x="900" y="38" width="116" height="50" rx="9" fill="url(#gTeal)" stroke="#14B8A6"/>
+      <text x="958" y="69" font-size="13" font-weight="700" fill="#fff" text-anchor="middle" font-family="Inter">Index</text>
+      <path d="M528 134 C 528 160, 528 160, 528 182" stroke="#C7CDD6" fill="none" stroke-width="2" marker-end="url(#arw)"/>
+      <!-- tier 2 : answer -->
+      <rect x="20" y="186" width="1016" height="92" rx="14" fill="#FAFAFB" stroke="#E5E7EB"/>
+      <text x="44" y="236" font-size="13" font-weight="700" fill="#9CA3AF" font-family="Inter, sans-serif">ANSWER</text>
+      <rect x="150" y="208" width="190" height="50" rx="9" fill="#EFF4FF" stroke="#2563EB"/>
+      <text x="245" y="239" font-size="14" font-weight="600" fill="#2563EB" text-anchor="middle" font-family="Inter">Hybrid Retrieval</text>
+      <rect x="380" y="208" width="180" height="50" rx="9" fill="#fff" stroke="#E5E7EB"/>
+      <text x="470" y="239" font-size="14" font-weight="600" fill="#111827" text-anchor="middle" font-family="Inter">Cited Answer</text>
+      <rect x="600" y="208" width="190" height="50" rx="9" fill="#fff" stroke="#E5E7EB"/>
+      <text x="695" y="239" font-size="14" font-weight="600" fill="#111827" text-anchor="middle" font-family="Inter">No-evidence refusal</text>
+      <text x="812" y="239" font-size="14" font-weight="500" fill="#9CA3AF" font-family="Inter">→</text>
+      <rect x="838" y="208" width="178" height="50" rx="9" fill="#fff" stroke="#2563EB" stroke-dasharray="5 4"/>
+      <text x="927" y="239" font-size="13" font-weight="600" fill="#2563EB" text-anchor="middle" font-family="Inter">Stream (SSE)</text>
+      <!-- base band -->
+      <rect x="20" y="300" width="1016" height="44" rx="10" fill="#111827"/>
+      <text x="44" y="327" font-size="12" font-weight="700" letter-spacing=".08em" fill="#fff" font-family="Inter">CAMPUSBRAIN</text>
+      <text x="988" y="327" font-size="12" font-weight="500" fill="#9CA3AF" text-anchor="end" font-family="Inter">Multi-tenant RAG · cited answers · built on production engineering principles</text>
+    </svg>
+  </div>
+</section>
+
+<!-- ============ SLIDE 2 : PROBLEM ============ -->
+<section class="slide">
+  <div class="index">THE PROBLEM</div>
+  <div class="pageno">02 / 10</div>
+  <div class="headline">The gap between demo and system</div>
+  <div class="subtitle">Most RAG projects stop when the demo works.</div>
+  <div style="flex:1;display:grid;grid-template-columns:400px 1fr;gap:30px;margin-top:26px">
+    <div>
+      <div class="kicker" style="margin-bottom:14px">Typical RAG</div>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <div class="node ghost" style="height:44px">Upload</div>
+        <div class="node ghost" style="height:44px">Chunk</div>
+        <div class="node ghost" style="height:44px">Embed</div>
+        <div class="node ghost" style="height:44px">Answer</div>
+      </div>
+    </div>
+    <div>
+      <div class="kicker teal" style="margin-bottom:14px">Production RAG <span style="color:#9CA3AF">— the work after the demo</span></div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px">
+        <div class="node" style="height:40px">Upload</div>
+        <div class="node blue" style="height:40px">Validate</div>
+        <div class="node" style="height:40px">Store</div>
+        <div class="node teal" style="height:40px">Queue</div>
+        <div class="node" style="height:40px">Worker</div>
+        <div class="node" style="height:40px">Embed</div>
+        <div class="node" style="height:40px">Vector DB</div>
+        <div class="node blue" style="height:40px">Monitor</div>
+        <div class="node teal" style="height:40px">Audit</div>
+        <div class="node" style="height:40px">Stream</div>
+        <div class="node" style="height:40px">Answer</div>
+        <div class="node ghost" style="height:40px">Recover</div>
+      </div>
+      <div class="legend" style="margin-top:14px">
+        <span class="li"><span class="sw" style="background:#2563EB"></span> security / validation</span>
+        <span class="li"><span class="sw" style="background:#14B8A6"></span> reliability / recovery</span>
+      </div>
+    </div>
+  </div>
+  <div class="footrule"></div>
+  <div class="foottxt"><span>Reliability · Scalability · Security · Observability · Cost · Recovery · Trade-offs</span><span class="dot">CampusBrain</span></div>
+</section>
+
+<!-- ============ SLIDE 3 : ARCHITECTURE ============ -->
+<section class="slide">
+  <div class="index">ARCHITECTURE</div>
+  <div class="pageno">03 / 10</div>
+  <div class="headline">System architecture</div>
+  <div class="subtitle">One deployment graph, every layer production-aware.</div>
+  <div style="flex:1;display:flex;flex-direction:column;margin-top:20px">
+    <svg width="100%" height="312" viewBox="0 0 1056 330" preserveAspectRatio="xMidYMid meet">
+      <defs>
+        <marker id="ab" markerWidth="8" markerHeight="8" refX="4" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z" fill="#2563EB"/></marker>
+        <marker id="at" markerWidth="8" markerHeight="8" refX="4" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z" fill="#14B8A6"/></marker>
+      </defs>
+      <!-- frontend -->
+      <rect x="368" y="8" width="320" height="52" rx="10" fill="#111827"/>
+      <text x="528" y="39" font-size="14" font-weight="700" fill="#fff" text-anchor="middle" font-family="Inter">Frontend · React + TypeScript · Vercel</text>
+      <path d="M528 60 L528 96" stroke="#2563EB" stroke-width="2" marker-end="url(#ab)"/>
+      <!-- api -->
+      <rect x="378" y="96" width="300" height="52" rx="10" fill="#EFF4FF" stroke="#2563EB" stroke-width="1.6"/>
+      <text x="528" y="120" font-size="14" font-weight="700" fill="#2563EB" text-anchor="middle" font-family="Inter">FastAPI</text>
+      <text x="528" y="138" font-size="11" font-weight="500" fill="#2563EB" text-anchor="middle" font-family="Inter">one uvicorn worker · RBAC · rate-limit</text>
+      <!-- fan down to four stores -->
+      <path d="M428 148 C 300 168, 120 170, 120 190" stroke="#2563EB" stroke-width="2" fill="none" marker-end="url(#ab)"/>
+      <path d="M528 148 L528 190" stroke="#2563EB" stroke-width="2" marker-end="url(#ab)"/>
+      <path d="M628 148 C 756 168, 880 170, 880 190" stroke="#2563EB" stroke-width="2" fill="none" marker-end="url(#ab)"/>
+      <!-- stores row -->
+      <rect x="40" y="196" width="176" height="56" rx="9" fill="#fff" stroke="#E5E7EB"/>
+      <text x="128" y="218" font-size="13" font-weight="700" fill="#111827" text-anchor="middle" font-family="Inter">PostgreSQL · Neon</text>
+      <text x="128" y="238" font-size="10.5" fill="#6B7280" text-anchor="middle" font-family="Inter">truth · job queue · chat</text>
+      <rect x="256" y="196" width="176" height="56" rx="9" fill="#fff" stroke="#E5E7EB"/>
+      <text x="344" y="218" font-size="13" font-weight="700" fill="#111827" text-anchor="middle" font-family="Inter">Supabase Storage</text>
+      <text x="344" y="238" font-size="10.5" fill="#6B7280" text-anchor="middle" font-family="Inter">S3-compatible blobs</text>
+      <rect x="472" y="196" width="176" height="56" rx="9" fill="#fff" stroke="#E5E7EB"/>
+      <text x="560" y="218" font-size="13" font-weight="700" fill="#111827" text-anchor="middle" font-family="Inter">Qdrant</text>
+      <text x="560" y="238" font-size="10.5" fill="#6B7280" text-anchor="middle" font-family="Inter">per-org collection</text>
+      <rect x="688" y="196" width="176" height="56" rx="9" fill="#fff" stroke="#E5E7EB"/>
+      <text x="776" y="218" font-size="13" font-weight="700" fill="#111827" text-anchor="middle" font-family="Inter">Redis · Upstash</text>
+      <text x="776" y="238" font-size="10.5" fill="#6B7280" text-anchor="middle" font-family="Inter">cache · rate-limit only</text>
+      <!-- right rail : worker / llm -->
+      <rect x="904" y="196" width="152" height="46" rx="9" fill="#E6F8F6" stroke="#14B8A6"/>
+      <text x="980" y="224" font-size="12.5" font-weight="700" fill="#0F766E" text-anchor="middle" font-family="Inter">Worker (asyncio)</text>
+      <path d="M980 242 C 980 262, 940 262, 940 278" stroke="#14B8A6" stroke-width="2" fill="none" marker-end="url(#at)"/>
+      <rect x="880" y="278" width="176" height="40" rx="9" fill="#E6F8F6" stroke="#14B8A6"/>
+      <text x="968" y="303" font-size="12.5" font-weight="700" fill="#0F766E" text-anchor="middle" font-family="Inter">LLM · Gemini</text>
+      <!-- observability rail -->
+      <rect x="40" y="280" width="800" height="36" rx="8" fill="#FAFAFB" stroke="#E5E7EB"/>
+      <text x="56" y="302" font-size="11" font-weight="700" fill="#111827" font-family="Inter">OBSERVABILITY</text>
+      <text x="168" y="302" font-size="11" fill="#6B7280" font-family="Inter">structured logs · correlation IDs · /metrics · liveness vs readiness · audit</text>
+    </svg>
+    <div style="display:flex;gap:26px;margin-top:6px;font-size:12px;color:#374151">
+      <span><b style="color:#111827">Hybrid retrieval</b> — semantic + keyword, fused</span>
+      <span><b style="color:#111827">Streaming</b> — SSE, final structured citation event</span>
+      <span><b style="color:#111827">Cited answers</b> — no-evidence refusal</span>
+    </div>
+  </div>
+  <div class="footrule"></div>
+  <div class="foottxt"><span>Request path · ingestion path · one deployment graph</span><span class="dot">CampusBrain</span></div>
+</section>
+
+<!-- ============ SLIDE 4 : DECISIONS ============ -->
+<section class="slide">
+  <div class="index">PRODUCTION ENGINEERING</div>
+  <div class="pageno">04 / 10</div>
+  <div class="headline">Decisions, not technologies</div>
+  <div class="subtitle">Every choice exists for a reason — here is why.</div>
+  <div class="decisions">
+    <div class="decision"><svg class="ic sm"><use href="#ic-shield"/></svg><div><div class="dn">Durable ingestion</div><div class="dw">An uploaded document must not silently vanish if the process dies.</div></div></div>
+    <div class="decision"><svg class="ic sm"><use href="#ic-db"/></svg><div><div class="dn">Postgres-backed job queue</div><div class="dw">A queue you can inspect, migrate, and trust — not a black box.</div></div></div>
+    <div class="decision"><svg class="ic sm"><use href="#ic-zap"/></svg><div><div class="dn">Redis for caching only</div><div class="dw">Speed where it helps; never a second source of truth.</div></div></div>
+    <div class="decision"><svg class="ic sm"><use href="#ic-wifi"/></svg><div><div class="dn">Streaming responses (SSE)</div><div class="dw">Honest token-by-token output; perceived latency drops.</div></div></div>
+    <div class="decision"><svg class="ic sm"><use href="#ic-file"/></svg><div><div class="dn">Audit logs</div><div class="dw">Know who did what, when — a fail-closed contract.</div></div></div>
+    <div class="decision"><svg class="ic sm"><use href="#ic-pulse"/></svg><div><div class="dn">Health checks · liveness vs readiness</div><div class="dw">“Am I alive” and “can I serve traffic” are different questions.</div></div></div>
+    <div class="decision"><svg class="ic sm"><use href="#ic-hash"/></svg><div><div class="dn">Correlation IDs</div><div class="dw">One request, one traceable thread through every log line.</div></div></div>
+    <div class="decision"><svg class="ic sm"><use href="#ic-refresh"/></svg><div><div class="dn">Retry strategy</div><div class="dw">Classify errors; only retry the retryable — never the fatal.</div></div></div>
+    <div class="decision"><svg class="ic sm"><use href="#ic-gauge"/></svg><div><div class="dn">Rate limiting</div><div class="dw">Protect a shared, finite model quota from one noisy tenant.</div></div></div>
+    <div class="decision"><svg class="ic sm"><use href="#ic-branch"/></svg><div><div class="dn">CI/CD</div><div class="dw">Every merge is a linted, migrated, tested, deployable artifact.</div></div></div>
+  </div>
+  <div class="footrule"></div>
+  <div class="foottxt"><span>Ten decisions · each with an explicit reason</span><span class="dot">CampusBrain</span></div>
+</section>
+
+<!-- ============ SLIDE 5 : TRADE-OFFS ============ -->
+<section class="slide">
+  <div class="index">ENGINEERING TRADE-OFFS</div>
+  <div class="pageno">05 / 10</div>
+  <div class="headline">Engineering is about trade-offs</div>
+  <div class="subtitle">Five decisions, each with a considered alternative.</div>
+  <div class="trows">
+    <div class="trow">
+      <span class="tno">01</span>
+      <div class="cell"><div class="lab">Problem</div><p>In-process background work can be killed mid-flight (idle sleep, OOM).</p></div>
+      <div class="cell"><div class="lab">Chosen</div><p><b>Postgres job table</b> — <i>SKIP LOCKED</i> claim, stale-lease reaper, backoff.</p></div>
+      <div class="cell"><div class="lab">Alternative</div><p>Redis/Arq queue or a separate worker fleet.</p></div>
+      <div class="cell"><div class="lab">Trade-off</div><p>Inspectable + durable for throughput; single-process coupling.</p></div>
+    </div>
+    <div class="trow">
+      <span class="tno">02</span>
+      <div class="cell"><div class="lab">Problem</div><p>Fast shared state without inventing a second datastore.</p></div>
+      <div class="cell"><div class="lab">Chosen</div><p><b>Redis for cache + rate-limit only.</b></p></div>
+      <div class="cell"><div class="lab">Alternative</div><p>Redis as a source of truth / job store.</p></div>
+      <div class="cell"><div class="lab">Trade-off</div><p>Speed without dual-write complexity; Redis never holds ground truth.</p></div>
+    </div>
+    <div class="trow">
+      <span class="tno">03</span>
+      <div class="cell"><div class="lab">Problem</div><p>Long ingestion must not block requests; free tier has no worker service.</p></div>
+      <div class="cell"><div class="lab">Chosen</div><p><b>In-process asyncio worker</b> over the durable job table.</p></div>
+      <div class="cell"><div class="lab">Alternative</div><p>Separate worker containers.</p></div>
+      <div class="cell"><div class="lab">Trade-off</div><p>Zero extra infra for crash-coupling; evolves into a real fleet.</p></div>
+    </div>
+    <div class="trow">
+      <span class="tno">04</span>
+      <div class="cell"><div class="lab">Problem</div><p>Files must be durable and URL-safe, not local to a stateless container.</p></div>
+      <div class="cell"><div class="lab">Chosen</div><p><b>S3-compatible object storage</b> — opaque keys, no server filesystem.</p></div>
+      <div class="cell"><div class="lab">Alternative</div><p>Local disk / SQLite sidecar.</p></div>
+      <div class="cell"><div class="lab">Trade-off</div><p>Network dependency for durable, portable, shared blobs.</p></div>
+    </div>
+    <div class="trow">
+      <span class="tno">05</span>
+      <div class="cell"><div class="lab">Problem</div><p>Answers take seconds; the user should see them arrive.</p></div>
+      <div class="cell"><div class="lab">Chosen</div><p><b>SSE</b> with a final structured citation event.</p></div>
+      <div class="cell"><div class="lab">Alternative</div><p>WebSockets or plain polling.</p></div>
+      <div class="cell"><div class="lab">Trade-off</div><p>Simple one-way HTTP streaming for no bidirectional channel.</p></div>
+    </div>
+  </div>
+  <div class="footrule"></div>
+  <div class="foottxt"><span>Every decision names what it gave up</span><span class="dot">CampusBrain</span></div>
+</section>
+
+<!-- ============ SLIDE 6 : FAILURE ============ -->
+<section class="slide">
+  <div class="index">FAILURE HANDLING</div>
+  <div class="pageno">06 / 10</div>
+  <div class="headline">What happens when things go wrong?</div>
+  <div class="subtitle">Designed for recovery, not for luck.</div>
+  <div style="display:flex;gap:26px;margin-top:18px">
+    <svg width="360" height="250" viewBox="0 0 360 250" preserveAspectRatio="xMidYMid meet" style="flex:none">
+      <defs>
+        <marker id="lf1" markerWidth="8" markerHeight="8" refX="4" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z" fill="#2563EB"/></marker>
+        <marker id="lf2" markerWidth="8" markerHeight="8" refX="4" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z" fill="#14B8A6"/></marker>
+      </defs>
+      <rect x="8" y="16" width="112" height="48" rx="9" fill="#fff" stroke="#E5E7EB"/>
+      <text x="64" y="46" font-size="13" font-weight="700" fill="#111827" text-anchor="middle" font-family="Inter">PENDING</text>
+      <path d="M120 40 L160 40" stroke="#2563EB" stroke-width="2" marker-end="url(#lf1)"/>
+      <rect x="162" y="16" width="132" height="48" rx="9" fill="#EFF4FF" stroke="#2563EB"/>
+      <text x="228" y="39" font-size="13" font-weight="700" fill="#2563EB" text-anchor="middle" font-family="Inter">RUNNING</text>
+      <text x="228" y="54" font-size="10" fill="#2563EB" text-anchor="middle" font-family="Inter">leased</text>
+      <path d="M294 40 L340 40" stroke="#14B8A6" stroke-width="2" marker-end="url(#lf2)"/>
+      <rect x="342" y="16" width="18" height="48" rx="9" fill="#E6F8F6" stroke="#14B8A6"/>
+      <text x="370" y="46" font-size="12" font-weight="700" fill="#0F766E" font-family="Inter">DONE</text>
+      <path d="M294 76 C 290 120, 100 120, 84 76" stroke="#DC2626" stroke-width="2" fill="none" stroke-dasharray="4 4" marker-end="url(#lf1)"/>
+      <rect x="16" y="120" width="112" height="48" rx="9" fill="#FDF0F0" stroke="#F4C7C7"/>
+      <text x="72" y="149" font-size="13" font-weight="700" fill="#7F1D1D" text-anchor="middle" font-family="Inter">FAILED</text>
+      <path d="M232 64 C 232 112, 88 112, 68 80" stroke="#6B7280" stroke-width="2" fill="none" stroke-dasharray="3 3" marker-end="url(#lf1)"/>
+      <text x="120" y="112" font-size="10" fill="#6B7280" font-family="Inter">stale lease → reaped</text>
+    </svg>
+    <div class="failures">
+      <div class="failrow">
+        <div class="failcell f"><div class="fl">Failure</div>Instance sleeps after 15 min idle</div>
+        <div class="failcell r"><div class="fl">Recovery</div>Durable job table survives; worker re-claims on wake</div>
+      </div>
+      <div class="failrow">
+        <div class="failcell f"><div class="fl">Failure</div>Worker crash mid-ingestion</div>
+        <div class="failcell r"><div class="fl">Recovery</div>Job stays leased → reaper reclaims → retry with backoff</div>
+      </div>
+      <div class="failrow">
+        <div class="failcell f"><div class="fl">Failure</div>Embedding API timeout / daily quota</div>
+        <div class="failcell r"><div class="fl">Recovery</div>Classified error → backoff; quota is fail-open & surfaced</div>
+      </div>
+      <div class="failrow">
+        <div class="failcell f"><div class="fl">Failure</div>Database reconnect</div>
+        <div class="failcell r"><div class="fl">Recovery</div>Connection pooling + transient retry; readiness reflects reality</div>
+      </div>
+      <div class="failrow">
+        <div class="failcell f"><div class="fl">Failure</div>Partial indexing / destructive re-index</div>
+        <div class="failcell r"><div class="fl">Recovery</div>Upsert-then-prune idempotency</div>
+      </div>
+    </div>
+  </div>
+  <div class="footrule"></div>
+  <div class="foottxt"><span>A system is judged by how it behaves when it breaks</span><span class="dot">CampusBrain</span></div>
+</section>
+
+<!-- ============ SLIDE 7 : CONCEPTS ============ -->
+<section class="slide">
+  <div class="index">PRODUCTION CONCEPTS</div>
+  <div class="pageno">07 / 10</div>
+  <div class="headline">Concepts over technologies</div>
+  <div class="subtitle">The ideas behind the system — each with a job to do.</div>
+  <div class="concepts">
+    <div class="concept"><svg class="ic"><use href="#ic-share"/></svg><div class="cn">Distributed Systems</div><div class="cw">Many parts act as one; failure is the default assumption.</div></div>
+    <div class="concept"><svg class="ic"><use href="#ic-zap"/></svg><div class="cn">Caching</div><div class="cw">Skip expensive work when the answer is already known.</div></div>
+    <div class="concept"><svg class="ic"><use href="#ic-refresh"/></svg><div class="cn">Retry Logic</div><div class="cw">Not all errors are equal — retry the retryable only.</div></div>
+    <div class="concept"><svg class="ic"><use href="#ic-eye"/></svg><div class="cn">Observability</div><div class="cw">You cannot fix what you cannot see.</div></div>
+    <div class="concept"><svg class="ic"><use href="#ic-file"/></svg><div class="cn">Audit Logging</div><div class="cw">Every consequential action leaves a durable record.</div></div>
+    <div class="concept"><svg class="ic"><use href="#ic-list"/></svg><div class="cn">Structured Logging</div><div class="cw">Machine-readable logs a correlation ID can tie together.</div></div>
+    <div class="concept"><svg class="ic"><use href="#ic-key"/></svg><div class="cn">RBAC</div><div class="cw">Access is a role decision, not a feature flag.</div></div>
+    <div class="concept"><svg class="ic"><use href="#ic-users"/></svg><div class="cn">Multi-tenancy</div><div class="cw">One platform, isolated per org at the data layer.</div></div>
+    <div class="concept"><svg class="ic"><use href="#ic-layers"/></svg><div class="cn">Hybrid Retrieval</div><div class="cw">Semantic recall plus exact-keyword precision, fused.</div></div>
+    <div class="concept reject"><svg class="ic"><use href="#ic-filter"/></svg><div class="cn">Reranking</div><div class="cw">Measured, added no value on our data — deliberately rejected.</div></div>
+    <div class="concept"><svg class="ic"><use href="#ic-wifi"/></svg><div class="cn">Streaming</div><div class="cw">Deliver the result as it is produced.</div></div>
+    <div class="concept"><svg class="ic"><use href="#ic-target"/></svg><div class="cn">Evaluation</div><div class="cw">Quality is a number you can move, or it is an opinion.</div></div>
+    <div class="concept"><svg class="ic"><use href="#ic-dollar"/></svg><div class="cn">Cost Tracking</div><div class="cw">Model spend is a ledger with an owner, not a surprise invoice.</div></div>
+    <div class="concept"><svg class="ic"><use href="#ic-cog"/></svg><div class="cn">Background Workers</div><div class="cw">Long work leaves the request path.</div></div>
+    <div class="concept"><svg class="ic"><use href="#ic-pulse"/></svg><div class="cn">Health Checks</div><div class="cw">Liveness and readiness are different contracts.</div></div>
+  </div>
+  <div class="footrule"></div>
+  <div class="foottxt"><span>15 concepts · one of them rejected with data — that honesty is the point</span><span class="dot">CampusBrain</span></div>
+</section>
+
+<!-- ============ SLIDE 8 : SCALING ============ -->
+<section class="slide">
+  <div class="index">SCALING JOURNEY</div>
+  <div class="pageno">08 / 10</div>
+  <div class="headline">The scaling journey</div>
+  <div class="subtitle">What breaks, what changes, what evolves — at each order of magnitude.</div>
+  <div class="scale">
+    <div class="stage"><span class="dot"></span><div class="cnt">10 <small>users</small></div><div class="sl">What breaks</div><div class="sb">Nothing — a single worker and free tier are enough.</div></div>
+    <div class="stage"><span class="dot"></span><div class="cnt">100 <small>users</small></div><div class="sl">What breaks</div><div class="sb">Concurrent chats. Per-org collections + RBAC start paying off.</div></div>
+    <div class="stage"><span class="dot"></span><div class="cnt">1K <small>users</small></div><div class="sl">What breaks</div><div class="sb">Hand-rolled IDF filter becomes the latency floor → real BM25.</div></div>
+    <div class="stage"><span class="dot"></span><div class="cnt">10K <small>users</small></div><div class="sl">What breaks</div><div class="sb">Per-chunk HTTP embedding (248 s) → batch + scale workers.</div></div>
+    <div class="stage"><span class="dot"></span><div class="cnt">100K <small>users</small></div><div class="sl">What breaks</div><div class="sb">Per-org collections strain Qdrant → shared + tenant filter.</div></div>
+    <div class="stage"><span class="dot"></span><div class="cnt">1M <small>users</small></div><div class="sl">What breaks</div><div class="sb">Everything becomes a distributed-systems problem.</div></div>
+  </div>
+  <div class="footrule"></div>
+  <div class="foottxt"><span>The architecture changes at every stage. The invariants — tenancy, durability, audit — do not.</span><span class="dot">CampusBrain</span></div>
+</section>
+
+<!-- ============ SLIDE 9 : LESSONS ============ -->
+<section class="slide">
+  <div class="index">LESSONS LEARNED</div>
+  <div class="pageno">09 / 10</div>
+  <div class="headline">Lessons from building — and operating</div>
+  <div class="subtitle">What the demo never teaches you.</div>
+  <div style="flex:1;display:flex;flex-direction:column;justify-content:center;gap:0;margin-top:12px">
+    <div style="padding:13px 0;border-bottom:1px solid var(--line)"><div style="font-size:25px;font-weight:700;letter-spacing:-.02em">Building AI is easy. Operating AI systems is hard.</div></div>
+    <div style="padding:13px 0;border-bottom:1px solid var(--line)"><div style="font-size:25px;font-weight:700;letter-spacing:-.02em">Reliability matters more than features.</div></div>
+    <div style="padding:13px 0;border-bottom:1px solid var(--line)"><div style="font-size:25px;font-weight:700;letter-spacing:-.02em">Good architecture is about <span style="color:var(--blue)">trade-offs</span>, not choices.</div></div>
+    <div style="padding:13px 0;border-bottom:1px solid var(--line)"><div style="font-size:25px;font-weight:700;letter-spacing:-.02em">Simple systems outperform unnecessary complexity.</div></div>
+    <div style="padding:13px 0;border-bottom:1px solid var(--line)"><div style="font-size:25px;font-weight:700;letter-spacing:-.02em">Measure before you build — we rejected the reranker <span style="color:var(--teal)">with data</span>.</div></div>
+    <div style="padding:13px 0"><div style="font-size:25px;font-weight:700;letter-spacing:-.02em">Production engineering begins where the demo ends.</div></div>
+  </div>
+  <div class="footrule"></div>
+  <div class="foottxt"><span>Six principles · one thesis</span><span class="dot">CampusBrain</span></div>
+</section>
+
+<!-- ============ SLIDE 10 : CONCLUSION ============ -->
+<section class="slide">
+  <div class="index">CONCLUSION</div>
+  <div class="pageno">10 / 10</div>
+  <div class="headline">CampusBrain</div>
+  <div class="subtitle">A production-oriented AI knowledge platform.</div>
+  <div class="grid3" style="margin-top:30px;display:grid;grid-template-columns:repeat(3,1fr);gap:20px">
+    <div style="border:1px solid var(--line);border-radius:12px;padding:20px;border-top:3px solid var(--blue)">
+      <svg class="ic" style="color:var(--blue);margin-bottom:10px"><use href="#ic-info"/></svg>
+      <div style="font-size:11px;font-weight:700;letter-spacing:.12em;color:var(--blue);text-transform:uppercase;margin-bottom:8px">What it is</div>
+      <div style="font-size:13.5px;line-height:1.55;color:#374151">A multi-tenant RAG knowledge platform for institutions — with cited, no-evidence-refusal answers. First customer: Sitare University.</div>
+    </div>
+    <div style="border:1px solid var(--line);border-radius:12px;padding:20px;border-top:3px solid var(--teal)">
+      <svg class="ic" style="color:var(--teal);margin-bottom:10px"><use href="#ic-book"/></svg>
+      <div style="font-size:11px;font-weight:700;letter-spacing:.12em;color:#0F766E;text-transform:uppercase;margin-bottom:8px">What I learned</div>
+      <div style="font-size:13.5px;line-height:1.55;color:#374151">Production engineering is the product. The demo is table stakes; the operating layer is where the value lives.</div>
+    </div>
+    <div style="border:1px solid var(--line);border-radius:12px;padding:20px;border-top:3px solid var(--ink)">
+      <svg class="ic" style="color:var(--ink);margin-bottom:10px"><use href="#ic-flag"/></svg>
+      <div style="font-size:11px;font-weight:700;letter-spacing:.12em;color:var(--ink);text-transform:uppercase;margin-bottom:8px">Why I built it</div>
+      <div style="font-size:13.5px;line-height:1.55;color:#374151">To prove I can design and operate a system — not just call a model API.</div>
+    </div>
+  </div>
+  <div style="margin-top:26px;padding:20px 26px;background:#111827;border-radius:14px">
+    <div style="color:#fff;font-size:21px;font-weight:700;letter-spacing:-.02em;line-height:1.3">I'd love feedback from backend, platform, and AI engineers<br>on the architecture and engineering trade-offs.</div>
+  </div>
+  <div class="footrule"></div>
+  <div class="foottxt"><span>#SystemDesign &nbsp;#RAG &nbsp;#Backend &nbsp;#AISystems &nbsp;#Reliability</span><span class="dot">CampusBrain · Production-Oriented AI Knowledge Platform</span></div>
+</section>
+
+</div>
+</body>
+</html>
