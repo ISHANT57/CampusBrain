@@ -41,7 +41,11 @@ export function useChat(orgSlug: string) {
   const [activeLocalId, setActiveLocalId] = useState<string | null>(
     () => load(orgSlug)[0]?.localId ?? null,
   )
-  const timers = useRef<Array<ReturnType<typeof setTimeout>>>([])
+  // One AbortController per in-flight reply, keyed by that message's id —
+  // not a single ref, because switching conversations while a background
+  // reply is still streaming and starting a second one is a real path (the
+  // Composer's streaming guard only looks at the ACTIVE conversation).
+  const controllers = useRef<Map<string, AbortController>>(new Map())
 
   // Switching tenants swaps the whole thread list. Without this the state
   // initialised for the first org would persist and then be written back
@@ -62,8 +66,8 @@ export function useChat(orgSlug: string) {
   const streaming = messages.some((m) => m.phase === 'searching' || m.phase === 'revealing')
 
   // Never overwrite a message the user has already stopped — this is the
-  // one guard every caller (the async response, the reveal ticker) routes
-  // through, so a late-arriving response can't resurrect a stopped bubble.
+  // one guard every caller (every delta, the final "done") routes through,
+  // so a late-arriving chunk can't resurrect a stopped bubble.
   const patch = useCallback((localId: string, msgId: string, next: Partial<ChatMessage>) => {
     setConversations((cs) =>
       cs.map((c) =>
@@ -79,13 +83,18 @@ export function useChat(orgSlug: string) {
     )
   }, [])
 
-  const clearTimers = () => {
-    timers.current.forEach((t) => (clearTimeout(t), clearInterval(t)))
-    timers.current = []
+  // Matches the previous clearTimers()'s scope exactly: global, not scoped
+  // to the active conversation. Stop's visibility is per-active-conversation
+  // (via `streaming` above), but its effect — like the old interval-based
+  // reveal — has always killed every in-flight reply, not just the visible
+  // one.
+  const abortAll = () => {
+    controllers.current.forEach((c) => c.abort())
+    controllers.current.clear()
   }
 
   const stop = useCallback(() => {
-    clearTimers()
+    abortAll()
     setConversations((cs) =>
       cs.map((c) => ({
         ...c,
@@ -96,46 +105,10 @@ export function useChat(orgSlug: string) {
     )
   }, [])
 
-  // The backend returns one complete JSON answer, not a token stream. This
-  // reveals the already-fetched text at a reading cadence for polish — it
-  // is not simulating a real stream. Citations are attached up front (the
-  // response already has them) so the source rail appears with the first
-  // token, the same order Perplexity-style UIs use.
-  const reveal = useCallback(
-    (localId: string, msgId: string, text: string) => {
-      const words = text.split(/(\s+)/)
-      let i = 0
-      const iv = setInterval(() => {
-        const step = 2 + (i % 3)
-        const chunk = words.slice(i, i + step).join('')
-        i += step
-        setConversations((cs) =>
-          cs.map((c) =>
-            c.localId !== localId
-              ? c
-              : {
-                  ...c,
-                  messages: c.messages.map((m) =>
-                    m.id === msgId && m.phase === 'revealing' ? { ...m, content: m.content + chunk } : m,
-                  ),
-                },
-          ),
-        )
-        if (i >= words.length) {
-          clearInterval(iv)
-          patch(localId, msgId, { phase: 'done' })
-        }
-      }, 18)
-      timers.current.push(iv)
-    },
-    [patch],
-  )
-
   const send = useCallback(
     async (text: string) => {
       const q = text.trim()
       if (!q) return
-      clearTimers()
 
       const replyId = uid()
       const userMsg: ChatMessage = { id: uid(), role: 'user', content: q }
@@ -164,24 +137,60 @@ export function useChat(orgSlug: string) {
       })
       if (!activeLocalId) setActiveLocalId(localId)
 
+      const controller = new AbortController()
+      controllers.current.set(replyId, controller)
+
+      // acc, not reading m.content back out of state: the full text is
+      // already known here as it arrives, so building it locally sidesteps
+      // any stale-closure race with concurrent state updates entirely.
+      let acc = ''
+      let gotDone = false
       try {
-        const res = await api.chat(orgSlug, q, history)
-        patch(localId, replyId, { phase: 'revealing', citations: res.citations ?? [] })
-        reveal(localId, replyId, res.answer)
+        for await (const event of api.chatStream(orgSlug, q, history, controller.signal)) {
+          if (event.type === 'delta') {
+            acc += event.text
+            patch(localId, replyId, { phase: 'revealing', content: acc })
+          } else {
+            // "done" carries the RENUMBERED answer, which is not the same
+            // string as `acc`: markers in the raw stream ([3]) can renumber
+            // to something else ([1]) once the whole answer is known, and
+            // citations only exist paired with the final numbering — so
+            // this must replace the streamed text, not append to it.
+            gotDone = true
+            patch(localId, replyId, { phase: 'done', content: event.answer, citations: event.citations })
+          }
+        }
+        if (!gotDone) {
+          // The connection ended without a "done" event — a dropped
+          // connection, not a clean finish. Left as 'revealing' this would
+          // show a permanent typing cursor with no way to know it stalled.
+          patch(localId, replyId, {
+            phase: 'error',
+            content: 'The response was interrupted before it finished. Please try again.',
+          })
+        }
       } catch (err) {
-        patch(localId, replyId, { phase: 'error', content: (err as Error).message })
+        // AbortError means the user hit Stop (or navigated away) — stop()
+        // has already set phase: 'stopped', and patch()'s own guard would
+        // no-op this anyway, but skip it explicitly rather than relying on
+        // that timing.
+        if ((err as Error).name !== 'AbortError') {
+          patch(localId, replyId, { phase: 'error', content: (err as Error).message })
+        }
+      } finally {
+        controllers.current.delete(replyId)
       }
     },
-    [activeLocalId, active, patch, reveal, orgSlug],
+    [activeLocalId, active, patch, orgSlug],
   )
 
   const newChat = useCallback(() => {
-    clearTimers()
+    abortAll()
     setActiveLocalId(null)
   }, [])
 
   const openChat = useCallback((localId: string) => {
-    clearTimers()
+    abortAll()
     setActiveLocalId(localId)
   }, [])
 
@@ -193,7 +202,7 @@ export function useChat(orgSlug: string) {
     [],
   )
 
-  useEffect(() => clearTimers, [])
+  useEffect(() => abortAll, [])
 
   return {
     conversations,
