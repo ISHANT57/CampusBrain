@@ -83,6 +83,53 @@ def keep_cited_sources(answer: str, hits: list[dict]) -> tuple[str, list[dict]]:
     return rewritten, citations
 
 
+def _grounding(
+    hits: list[dict], citations: list[dict], best_semantic: float, refused: bool
+) -> dict:
+    """The measured basis for an answer, shaped for the response.
+
+    Reads straight off values _log_answer already records, so the response and
+    the eval trace can never disagree about the same answer -- there is one
+    computation, not two.
+
+    No derived verdict here on purpose (see AnswerGrounding's docstring): this
+    returns what was measured, and the client is responsible for presenting it
+    with its basis visible rather than collapsing it to a label.
+    """
+    return {
+        "best_semantic_score": round(best_semantic, 4),
+        "relevance_threshold": RELEVANCE_THRESHOLD,
+        "retrieved_chunks": len(hits),
+        "cited_chunks": len(citations),
+        "cited_documents": len({c["document_id"] for c in citations}),
+        "refused": refused,
+    }
+
+
+def _retrieved_documents(hits: list[dict]) -> list[dict]:
+    """Retrieved chunks collapsed to one entry per document, in rank order.
+
+    Insertion order is retrieval rank, and dicts preserve it -- so the client
+    lists the strongest-matching document first without needing a score it
+    should not be shown (the fused RRF score is on a different scale from the
+    semantic one and is meaningless out of context).
+
+    filename is resolved by the API layer, the same split _hydrate_citation
+    already uses: this service deals in document ids, not display strings.
+    """
+    grouped: dict[int, dict] = {}
+    for h in hits:
+        entry = grouped.setdefault(
+            h["document_id"], {"document_id": h["document_id"], "pages": [], "chunks": 0}
+        )
+        entry["chunks"] += 1
+        if h["page_number"] not in entry["pages"]:
+            entry["pages"].append(h["page_number"])
+    for entry in grouped.values():
+        entry["pages"].sort()
+    return list(grouped.values())
+
+
 def _log_answer(
     org_id: int, question: str, history: list[dict] | None, hits: list[dict],
     best_semantic: float, refused: bool, citations: list[dict],
@@ -204,7 +251,15 @@ def answer_question(
     if refused:
         _log_answer(org_id, question, history, hits, best_semantic, True, [], retrieval_ms, 0.0,
                     retrieval_query=retrieval_query, answer_text=NO_EVIDENCE_RESPONSE)
-        return {"answer": NO_EVIDENCE_RESPONSE, "citations": []}
+        # Grounding is returned on the refusal path too: "we found nothing above
+        # 0.35" is itself a measured, useful statement, and suppressing it here
+        # would make a refusal indistinguishable from a backend that simply
+        # doesn't report grounding yet.
+        return {
+            "answer": NO_EVIDENCE_RESPONSE,
+            "citations": [],
+            "grounding": _grounding(hits, [], best_semantic, True),
+        }
 
     # Sanitize retrieved text before it ever enters the prompt (M40).
     sanitized_hits = [{**hit, "text": sanitize_context(hit["text"])} for hit in hits]
@@ -221,7 +276,11 @@ def answer_question(
     answer, citations = keep_cited_sources(result.text, sanitized_hits)
     _log_answer(org_id, question, history, hits, best_semantic, False, citations, retrieval_ms, llm_ms,
                 usage=result.usage, retrieval_query=retrieval_query, answer_text=answer)
-    return {"answer": answer, "citations": citations}
+    return {
+        "answer": answer,
+        "citations": citations,
+        "grounding": _grounding(hits, citations, best_semantic, False),
+    }
 
 
 def stream_answer(
@@ -234,19 +293,31 @@ def stream_answer(
     keep_cited_sources needs the COMPLETE answer text to know which markers
     survived and how to renumber them contiguously -- that's inherently a
     whole-text operation, not something a token stream can do incrementally.
-    So the contract is: every event up to the last is
-    {"type": "delta", "text": ...}, carrying the model's raw, un-renumbered
-    output, for a live "typing" UI. The FINAL event is
-    {"type": "done", "answer": ..., "citations": [...]}, carrying the exact
-    same renumbered text and citation list answer_question would have
-    returned in one shot. A client that ignores every delta and reads only
-    the final "done" event gets an identical result to the non-streaming
-    endpoint -- streaming changes the transport, not the contract.
+    So the contract is: an optional leading
+    {"type": "retrieved", "documents": [...]} once retrieval has run, then
+    every event up to the last is {"type": "delta", "text": ...}, carrying the
+    model's raw, un-renumbered output, for a live "typing" UI. The FINAL event
+    is {"type": "done", "answer": ..., "citations": [...],
+    "grounding": {...}}, carrying the exact same renumbered text, citation list
+    and grounding answer_question would have returned in one shot. A client
+    that ignores every delta and reads only the final "done" event gets an
+    identical result to the non-streaming endpoint -- streaming changes the
+    transport, not the contract.
     """
     hits, best_semantic, refused, retrieval_ms, retrieval_query = _retrieve(db, org_id, question, top_k, history)
     if refused:
+        # No "retrieved" event on the refusal path, deliberately. A refusal
+        # means nothing retrieved cleared the relevance floor, so listing those
+        # documents alongside "I don't have information on that" invites the
+        # reader to go read them as if they were relevant. The whole meaning of
+        # the refusal is that they are not.
         yield {"type": "delta", "text": NO_EVIDENCE_RESPONSE}
-        yield {"type": "done", "answer": NO_EVIDENCE_RESPONSE, "citations": []}
+        yield {
+            "type": "done",
+            "answer": NO_EVIDENCE_RESPONSE,
+            "citations": [],
+            "grounding": _grounding(hits, [], best_semantic, True),
+        }
         _log_answer(org_id, question, history, hits, best_semantic, True, [], retrieval_ms, 0.0,
                     retrieval_query=retrieval_query, answer_text=NO_EVIDENCE_RESPONSE)
         return
@@ -259,6 +330,23 @@ def stream_answer(
     chunks: list[str] = []
     usage: TokenUsage | None = None
     try:
+        # Retrieval is done and the LLM call hasn't started. Emitting here is
+        # the whole point: generation takes seconds, and the sources panel
+        # otherwise holds a skeleton for all of it despite this data being
+        # ready.
+        #
+        # INSIDE the try, and that placement is load-bearing: GeneratorExit is
+        # raised at whichever yield the generator is suspended on, so with this
+        # yield sitting above the try, a client that disconnected after
+        # retrieval but before the first token skipped the handler below and
+        # was never logged at all. Caught by
+        # test_a_client_disconnecting_before_generation_is_still_logged.
+        yield {"type": "retrieved", "documents": _retrieved_documents(hits)}
+        # Re-stamped after that yield: a generator suspended at a yield resumes
+        # only once the client has read the frame, so leaving t1 above it folds
+        # SSE flush time into llm_ms and ttft_ms -- inflating two latency
+        # metrics that feed /metrics percentiles with transport, not model time.
+        t1 = time.perf_counter()
         for chunk in get_llm_provider().generate_stream(prompt):
             if chunk.usage is not None:
                 usage = chunk.usage  # the final sentinel chunk; carries no text
@@ -270,7 +358,12 @@ def stream_answer(
             yield {"type": "delta", "text": chunk.text}
         llm_ms = (time.perf_counter() - t1) * 1000
         answer, citations = keep_cited_sources("".join(chunks), sanitized_hits)
-        yield {"type": "done", "answer": answer, "citations": citations}
+        yield {
+            "type": "done",
+            "answer": answer,
+            "citations": citations,
+            "grounding": _grounding(hits, citations, best_semantic, False),
+        }
         _log_answer(org_id, question, history, hits, best_semantic, False, citations, retrieval_ms, llm_ms, ttft_ms,
                     usage, retrieval_query=retrieval_query, answer_text=answer)
     except GeneratorExit:

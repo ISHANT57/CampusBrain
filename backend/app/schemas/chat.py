@@ -2,7 +2,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from app.schemas.answer import Citation
+from app.schemas.answer import AnswerGrounding, Citation
 
 # How many prior turns to feed back to the model. Keeps the prompt bounded —
 # whole conversations would eventually overflow the model's context window.
@@ -30,3 +30,8 @@ class ChatRequest(BaseModel):
 class ChatResponse(BaseModel):
     answer: str
     citations: list[Citation]
+    # Additive, and optional so an older frontend build deserialising this
+    # response is unaffected -- the two deploy independently (Vercel and
+    # Render), so every response-shape change has to survive the window where
+    # one is ahead of the other.
+    grounding: AnswerGrounding | None = None

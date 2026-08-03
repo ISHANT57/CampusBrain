@@ -11,7 +11,7 @@ from app.core.database import get_db
 from app.core.rate_limit import limiter
 from app.models.organization import Organization
 from app.repositories.document_repository import DocumentRepository
-from app.schemas.answer import Citation
+from app.schemas.answer import AnswerGrounding, Citation
 from app.schemas.chat import ChatRequest, ChatResponse
 from app.services.rag_service import answer_question, stream_answer
 
@@ -47,17 +47,33 @@ def _org_id(db: Session, slug: str) -> int:
     return org.id
 
 
+def _filename(doc_repo: DocumentRepository, document_id: int) -> str:
+    """Bare document_id -> display filename, scoped to the caller's org.
+
+    Kept in the API layer, not rag_service: retrieval and citation logic deal
+    in ids, and this is the one place a display string is resolved -- shared by
+    the blocking response, the SSE citations, and the SSE retrieved event.
+    """
+    document = doc_repo.get(document_id)
+    return document.filename if document else "(unknown)"
+
+
 def _hydrate_citation(doc_repo: DocumentRepository, c: dict) -> dict:
-    """rag_service returns citations with a bare document_id; the filename
-    lookup lives here (the API layer), shared by the blocking and the SSE
-    response paths so there's exactly one place that resolves it."""
-    document = doc_repo.get(c["document_id"])
     return {
         "index": c["index"],
         "document_id": c["document_id"],
-        "filename": document.filename if document else "(unknown)",
+        "filename": _filename(doc_repo, c["document_id"]),
         "page_number": c["page_number"],
         "excerpt": c["excerpt"],
+    }
+
+
+def _hydrate_retrieved(doc_repo: DocumentRepository, d: dict) -> dict:
+    return {
+        "document_id": d["document_id"],
+        "filename": _filename(doc_repo, d["document_id"]),
+        "pages": d["pages"],
+        "chunks": d["chunks"],
     }
 
 
@@ -68,15 +84,21 @@ def _answer(db: Session, org_id: int, payload: ChatRequest) -> ChatResponse:
     )
     doc_repo = DocumentRepository(db, org_id)
     citations = [Citation(**_hydrate_citation(doc_repo, c)) for c in result["citations"]]
-    return ChatResponse(answer=result["answer"], citations=citations)
+    return ChatResponse(
+        answer=result["answer"],
+        citations=citations,
+        grounding=AnswerGrounding(**result["grounding"]) if result.get("grounding") else None,
+    )
 
 
 def _stream_events(db: Session, org_id: int, payload: ChatRequest):
     """SSE body for /chat/stream[/{org_slug}]. Same request contract as the
     blocking endpoint, different transport: one "data: {json}\\n\\n" line per
-    event -- {"type": "delta", "text": ...} while the answer is generating,
-    then exactly one {"type": "done", "answer": ..., "citations": [...]}
-    carrying the final renumbered text and hydrated citations. See
+    event -- an optional leading {"type": "retrieved", "documents": [...]} once
+    retrieval has run, then {"type": "delta", "text": ...} while the answer is
+    generating, then exactly one {"type": "done", "answer": ...,
+    "citations": [...], "grounding": {...}} carrying the final renumbered text,
+    hydrated citations and the measured basis for the answer. See
     rag_service.stream_answer's docstring for why renumbering can't be done
     incrementally, chunk by chunk.
     """
@@ -87,6 +109,8 @@ def _stream_events(db: Session, org_id: int, payload: ChatRequest):
     ):
         if event["type"] == "done":
             event = {**event, "citations": [_hydrate_citation(doc_repo, c) for c in event["citations"]]}
+        elif event["type"] == "retrieved":
+            event = {**event, "documents": [_hydrate_retrieved(doc_repo, d) for d in event["documents"]]}
         yield f"data: {json.dumps(event)}\n\n"
 
 

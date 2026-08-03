@@ -304,6 +304,236 @@
     font-size: inherit;
   }
 
+  /* -------------------------------------------------------------------------
+     Everything below became reachable when the hand-rolled parser was replaced
+     with react-markdown + remark-gfm. Before that, an answer physically could
+     not contain a heading, table, blockquote or task list, so there was
+     nothing to style. Each rule here backs a construct the answer prompt now
+     explicitly asks the model to use.
+
+     No syntax highlighter, deliberately: this corpus is admission handbooks
+     and fee policies, so a code block is a near-zero event, and ~90 KB of
+     highlight.js on every page load to colour something that may never appear
+     is not a trade this product should make. Revisit only if code answers turn
+     out to be real.
+     ------------------------------------------------------------------------- */
+
+  /* Headings run one step BELOW their nesting depth on purpose. An answer is a
+     fragment inside a page that already has an <h1>/<h2>, so a model's "##"
+     is a section within the answer, not a peer of the page title. Sizes stay
+     close to body copy — a 28px heading inside a chat turn reads as a new
+     document, not a subsection. */
+  .cb-scope .prose-answer h1,
+  .cb-scope .prose-answer h2 {
+    font-size: 17px;
+    font-weight: 600;
+    line-height: 1.4;
+    letter-spacing: -0.01em;
+    color: var(--ink);
+  }
+  .cb-scope .prose-answer h3 {
+    font-size: 15.5px;
+    font-weight: 600;
+    line-height: 1.45;
+    color: var(--ink);
+  }
+  .cb-scope .prose-answer h4,
+  .cb-scope .prose-answer h5,
+  .cb-scope .prose-answer h6 {
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 1.5;
+    color: var(--muted);
+  }
+  /* Extra air ABOVE a heading only. The default `* + *` rule gives every
+     sibling the same 16px, which makes a heading float equidistant between
+     the section it closes and the one it opens. */
+  .cb-scope .prose-answer :is(h1, h2, h3, h4, h5, h6):not(:first-child) {
+    margin-top: 26px;
+  }
+
+  /* Nested lists — reachable now that a real parser handles indentation. */
+  .cb-scope .prose-answer li > ul,
+  .cb-scope .prose-answer li > ol {
+    margin-top: 6px;
+  }
+  .cb-scope .prose-answer li > ul {
+    list-style: circle;
+  }
+  .cb-scope .prose-answer li p {
+    margin: 0;
+  }
+  .cb-scope .prose-answer li > p + p {
+    margin-top: 8px;
+  }
+
+  /* Task lists (remark-gfm). The checkbox is disabled by the parser — it
+     reflects what the document says, it is not a control the reader can
+     operate, so it must not look clickable. */
+  .cb-scope .prose-answer li:has(> input[type='checkbox']) {
+    list-style: none;
+    margin-left: -20px;
+  }
+  .cb-scope .prose-answer input[type='checkbox'] {
+    width: 13px;
+    height: 13px;
+    margin-right: 8px;
+    vertical-align: baseline;
+    accent-color: var(--accent);
+    cursor: default;
+  }
+
+  /* Tables. The wrapper is a focusable scroll region (see AnswerBody's Table
+     component) so a six-column fee table scrolls inside itself rather than
+     making the whole conversation scroll sideways on a phone. */
+  .cb-scope .prose-answer [data-table-scroll] {
+    overflow-x: auto;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-card);
+  }
+  .cb-scope .prose-answer table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13.5px;
+    line-height: 1.55;
+  }
+  .cb-scope .prose-answer th,
+  .cb-scope .prose-answer td {
+    padding: 9px 14px;
+    text-align: left;
+    vertical-align: top;
+  }
+  .cb-scope .prose-answer th {
+    background: var(--sunken);
+    font-weight: 600;
+    font-size: 12.5px;
+    color: var(--muted);
+    white-space: nowrap;
+  }
+  /* Row separators only — vertical rules turn a small table into a grid and
+     fight the surrounding prose for attention. */
+  .cb-scope .prose-answer tr + tr td {
+    border-top: 1px solid var(--border);
+  }
+  .cb-scope .prose-answer thead + tbody tr:first-child td {
+    border-top: 1px solid var(--border);
+  }
+
+  /* Blockquote — a quotation from a document, distinct from a callout. */
+  .cb-scope .prose-answer blockquote {
+    border-left: 2px solid var(--border-strong);
+    padding-left: 14px;
+    color: var(--muted);
+  }
+  .cb-scope .prose-answer blockquote > * + * {
+    margin-top: 10px;
+  }
+
+  .cb-scope .prose-answer hr {
+    border: 0;
+    border-top: 1px solid var(--border);
+    margin: 24px 0;
+  }
+  .cb-scope .prose-answer a {
+    color: var(--accent);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    text-decoration-thickness: 1px;
+  }
+  .cb-scope .prose-answer del {
+    color: var(--faint);
+  }
+
+  /* ---- Callouts (`> [!NOTE]` etc., via remarkCallouts) -------------------
+     Tinted surface + matching icon, reusing the four semantic ramps the theme
+     already defines rather than introducing callout-specific colours. */
+  .cb-scope .prose-answer [data-callout] {
+    display: flex;
+    gap: 10px;
+    padding: 12px 14px;
+    border: 1px solid;
+    border-radius: var(--radius-card);
+    font-size: 14.5px;
+    line-height: 1.6;
+  }
+  .cb-scope .prose-answer [data-callout] > svg {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+    margin-top: 3px;
+  }
+  .cb-scope .prose-answer [data-callout-body] {
+    min-width: 0;
+    flex: 1;
+  }
+  .cb-scope .prose-answer [data-callout-body] > * + * {
+    margin-top: 8px;
+  }
+  .cb-scope .prose-answer [data-callout='note'],
+  .cb-scope .prose-answer [data-callout='important'] {
+    background: var(--accent-soft);
+    border-color: var(--accent-border);
+  }
+  .cb-scope .prose-answer [data-callout='note'] > svg,
+  .cb-scope .prose-answer [data-callout='important'] > svg {
+    color: var(--accent);
+  }
+  .cb-scope .prose-answer [data-callout='warning'] {
+    background: var(--warning-soft);
+    border-color: color-mix(in srgb, var(--warning) 25%, transparent);
+  }
+  .cb-scope .prose-answer [data-callout='warning'] > svg {
+    color: var(--warning);
+  }
+  .cb-scope .prose-answer [data-callout='success'] {
+    background: var(--success-soft);
+    border-color: color-mix(in srgb, var(--success) 25%, transparent);
+  }
+  .cb-scope .prose-answer [data-callout='success'] > svg {
+    color: var(--success);
+  }
+
+  /* ---- Inline citation markers ------------------------------------------
+     A true superscript, not the bordered chip this used to be. A chip reads as
+     a UI control interrupting the sentence; a superscript reads as a
+     reference, which is what it is — the same convention a printed document
+     uses, so it needs no explaining.
+
+     The <sup> handles raising and the button carries the hit area. Font-size
+     is set explicitly rather than left to the browser's `smaller`, which
+     compounds when a marker lands inside a heading or a table cell. */
+  .cb-scope .prose-answer sup[data-cite] {
+    font-size: 100%;
+    vertical-align: baseline;
+    line-height: 0;
+  }
+  .cb-scope .prose-answer sup[data-cite] > button {
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    font-weight: 500;
+    line-height: 1;
+    color: var(--accent);
+    vertical-align: super;
+    /* Padding, not margin, on the left: a right margin left a visible gap
+       before the punctuation that almost always follows a citation
+       ("… full scholarship ¹ ."). */
+    padding: 2px 1px 2px 2px;
+    border-radius: 3px;
+    cursor: pointer;
+    transition:
+      background-color 150ms,
+      color 150ms;
+  }
+  .cb-scope .prose-answer sup[data-cite] > button:hover {
+    background: var(--accent-soft);
+  }
+  /* The marker whose excerpt is currently open, so the reader can see which
+     reference the highlighted source belongs to without re-reading. */
+  .cb-scope .prose-answer sup[data-cite] > button[data-active] {
+    background: var(--accent);
+    color: var(--accent-fg);
+  }
+
   .cb-scope [cmdk-group-heading] {
     font-family: var(--font-mono);
     font-size: 11px;

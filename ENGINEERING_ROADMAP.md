@@ -808,6 +808,124 @@ worked. Found by actually running the documented command in a Codespace.
 
 ---
 
+**ADR-017 - Chat answer rendering, and reporting an answer's basis without
+inventing a verdict**
+* Accepted * 2026-08-03
+
+**The markdown parser was the real constraint, not the styling.** The chat
+renderer was a hand-rolled regex handling exactly `**bold**`, `*italic*`,
+`` `code` ``, `[n]`, bullets and numbered lists -- and `prose-answer` in
+theme.css had no rules for headings, tables, blockquotes or task lists because
+an answer physically could not contain one. Replaced with react-markdown +
+remark-gfm. Two halves, and shipping either alone would have been pointless:
+a renderer cannot display structure the model never emitted, so
+prompt_templates.py went to **v2** with formatting guidance. Every v1
+instruction is byte-identical -- the citation contract, the refusal string, and
+all three counting rules, each of which was tuned against a specific observed
+failure (INC notes in that file). The formatting block is framed as *match the
+structure to the content*, not *use headings*: told to structure
+unconditionally, models wrap a one-line answer in a heading and a two-row
+table, which is harder to read than the sentence it replaced.
+
+**Citations are converted on the syntax tree, not in the rendered output.**
+`[n]` -> `<sup>` runs as a remark plugin. The two cheaper options were both
+rejected on correctness, not taste: a regex over rendered HTML cannot
+distinguish prose from code and would rewrite an answer quoting
+`` `results[1]` `` or a regex like `[0-9]`; pre-substituting real HTML into the
+markdown string requires `rehype-raw`, which enables arbitrary HTML from **LLM
+output** -- an XSS surface accepted in exchange for a superscript. Operating on
+mdast means code spans and fenced blocks are simply different node types and
+are skipped structurally. Two of the 18 checks in `verify-markdown.mjs` cover
+exactly this; the regex approach fails both. `rehype-raw` stays out
+permanently.
+
+**Sources are grouped by document.** Five chunks from one handbook rendered as
+five cards showing the same filename, which reads as five sources when it is
+one -- overstating the breadth of evidence behind an answer, the same class of
+quiet dishonesty section 10's unit-error story is about. One card per document
+now, with `pp.2,4,7`. Consequence worth stating: "3 sources" counts documents
+while the superscripts still carry the model's own numbering, so each card
+names its markers explicitly rather than leaving the reader to infer the
+mapping.
+
+**P2-1: grounding is reported as measurements, never as a label.** ChatResponse
+and the SSE `done` event gained a `grounding` object: `best_semantic_score`
+**paired with** the `relevance_threshold` it was compared against, plus
+`retrieved_chunks` / `cited_chunks` / `cited_documents`. Every one of those was
+already computed in `_log_answer` and written to `eval_traces` and the log line,
+then discarded from the response -- nothing new is measured, something already
+measured stopped being thrown away, and there is one computation so the response
+and the trace can never disagree about the same answer.
+
+There is deliberately **no `confidence: high|medium|low`**. Bucketing means
+choosing cutoffs, no cutoff here has been validated against a labelled set, and
+a badge reading "High confidence" gets quoted downstream as though something
+measured it. This is ADR-016's refusal to report recall/precision applied one
+layer up: emit the numbers, let the reader judge. The UI shows
+"Answered from 3 documents, 9 excerpts" with the score and floor behind a
+disclosure, closing on the caveat that match scores measure similarity, not
+correctness. Grounding is returned on **refusals** too -- "nothing reached 0.35"
+is a measured statement, and omitting it would make a refusal
+indistinguishable from a backend too old to report grounding at all.
+
+**P2-2: a leading `retrieved` SSE event.** The sources panel held a skeleton for
+the entire generation -- typically 3-8 seconds -- despite retrieval having
+finished before the first token. One event now fires between retrieval and
+generation. Three constraints keep it honest: it is labelled *reading N
+documents*, never *sources*, because the model may cite none of them; it
+carries **no excerpt text**, because a retrieved chunk the answer never cited is
+not evidence for that answer, so the row has no disclosure affordance implying
+hidden content; and it is **absent on a refusal**, where listing
+retrieved-but-rejected documents beside "I don't have information on that"
+invites reading them as relevant when the refusal's entire meaning is that they
+are not. The searched-count shrinking to a smaller cited-count is expected and
+made legible by the label change, not hidden.
+
+**Placement of that yield is load-bearing, and a test caught it.** Emitted
+above the `try/except GeneratorExit`, a client disconnecting between retrieval
+and the first token skipped the partial-answer log entirely -- GeneratorExit is
+raised at whichever yield the generator is parked on, so the handler that exists
+precisely to stop abandoned answers vanishing from the record was bypassed. The
+existing disconnect test failed; the code was fixed rather than the test, and
+`test_a_client_disconnecting_before_generation_is_still_logged` now guards it
+permanently. `t1` is also re-stamped after that yield: a generator resumes only
+once the client has read the frame, so leaving it above folds SSE flush time
+into `llm_ms` and `ttft_ms`, polluting two `/metrics` percentiles with transport
+rather than model time.
+
+**Rejected, with reasons recorded rather than left as gaps.**
+- **No syntax highlighter.** ~90 KB of highlight.js to colour code blocks in a
+  corpus of admission handbooks and fee policies, where a fenced block is a
+  near-zero event. Revisit only if code answers turn out to be real.
+- **No virtualised history.** It unmounts offscreen DOM, which is exactly what
+  the citation scroll-to-source feature needs to exist -- the two asks
+  conflicted in the same phase. Also breaks Ctrl+F and streaming scroll
+  anchoring, at message counts (<50/conversation) far below where it would pay.
+  Revisit when p95 message count exceeds 100 **and** measured jank exists.
+- **shadcn/ui not adopted.** The hand-rolled CVA primitives already follow its
+  pattern and are better fitted in at least one place (the tooltip's
+  `coarse:hidden` rule, which solves tap-sticks-open). Adopting the library
+  meant rewriting Button/Badge/Skeleton/Tooltip/Card for no functional gain.
+
+**Three pre-existing bugs fixed while in here.** `aria-live` wrapped the entire
+answer body, which changes on every streamed token, so assistive tech was asked
+to re-announce a continuously growing region hundreds of times per answer --
+worse than no live region; a short `role="status"` node now carries only the
+phase. `id="source-N"` was duplicated across every assistant message, so
+`href="#source-1"` scrolled to the earliest match in the thread rather than the
+one clicked and `aria-controls` pointed at the wrong panel (now scoped with
+`useId()`). And an inline ref callback detached/reattached on every render,
+including every streaming token.
+
+**Cost, stated rather than buried.** Bundle 432 -> 598 KB raw, ~+50 KB gzip,
+all of it the unified/remark pipeline. Accepted because it renders every answer,
+where highlight.js would have coloured something that may never appear.
+`verify-markdown.mjs` needs Node >= 23 for native type stripping and CI pins
+Node 20, so it is **not** wired into CI yet -- named here so it is a known gap
+rather than a forgotten one.
+
+---
+
 ## 6. Production Incident Library
 
 Append-only. All eight are **real**, recovered from code comments and
@@ -1180,3 +1298,4 @@ migrations. That is the one dimension where free infrastructure costs you nothin
 | `DEPLOYMENT_JOURNAL.md` | Primary source for INC-002/003/004 |
 | `DOCUMENTATION.md` | ⚠️ Stale in 3 load-bearing places (D8). See `LLM_ENGINEERING.md` Appendix A |
 | 2026-08-03 (5) | **Phases 4/5/6/7/9** (ADR-016). Phase 7: `tenant_id`/`user_id` on the http_request log line, with a per-request ContextVar reset so one caller's identity can't leak into the next request's log. Phase 9: three security headers on every response (no CSP/HSTS, reasons recorded), plus `GET /documents/{id}/download` finally wiring up the `presigned_url()` helper that had no caller -- 15-min, admin-only, audited. Phase 4: `eval_traces` table + `/evaluation/stats`, infrastructure only -- explicitly NO recall/precision/groundedness columns, since no golden set exists to compute them (2 tests assert their absence). Phase 5: integration tests for SKIP LOCKED double-claim prevention, stale-lease reap/no-reap, RBAC on all new endpoints, cross-tenant 404s. Phase 6: CI (lint + migrations + 84-test fast tier on real Postgres, frontend build), both halves verified green locally first; ruff limited to E,F after measuring that B008/UP007/I001 fire 249 times on FastAPI/Alembic/pyrefly idioms, and no ruff-format check (70 files would change). Also fixed `pytest.ini pythonpath` so the documented bare `pytest` command works. 89 fast tests + 14 new integration tests. |
+| 2026-08-03 (6) | **Chat rendering + answer grounding** (ADR-017). Replaced the hand-rolled regex markdown parser with react-markdown + remark-gfm, plus prompt_templates v2 so the model actually emits the structure the renderer can now show (all v1 counting/citation instructions byte-identical). Citations became real superscripts converted by a remark plugin -- not a regex over rendered HTML (would rewrite `results[1]`) and not rehype-raw (XSS surface on LLM output). Sources grouped by document, so five chunks from one handbook stop reading as five sources. P2-1: `grounding` on ChatResponse and the SSE done event -- best semantic score PAIRED with the threshold it was compared against, plus retrieved/cited chunk and document counts; all already computed and previously discarded. Explicitly NO high/medium/low confidence label: bucketing invents unvalidated cutoffs and a label gets quoted as measured. P2-2: leading `retrieved` SSE event so the sources panel fills during generation instead of holding a skeleton -- labelled 'reading', carrying no excerpts, absent on refusals. Its yield placement was a real bug caught by an existing test (GeneratorExit above the try skipped the partial-answer log); fixed in code, now guarded permanently. Rejected with reasons: syntax highlighting (~90 KB for a corpus with no code) and virtualization (unmounts the DOM citation anchors need). Also fixed a live-region re-announcement bug, duplicate source ids across messages, and ref-callback churn. 87 fast tests (84 before) + 18 markdown checks. Bundle 432 -> 598 KB raw. |

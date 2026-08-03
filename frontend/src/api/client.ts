@@ -1,4 +1,4 @@
-import type { Citation } from "../components/chat/types";
+import type { Citation, Grounding, RetrievedDocument } from "../components/chat/types";
 
 const TOKEN_KEY = "campusbrain_token";
 
@@ -32,15 +32,27 @@ async function request(path: string, options: RequestInit = {}) {
 
 export type ChatTurn = { role: "user" | "assistant"; content: string };
 
-// Mirrors backend/app/api/v1/chat.py's _stream_events exactly: every event up
-// to the last is a raw, UN-renumbered fragment of model output (a "typing"
-// UI has nothing else to show yet); the last carries the final renumbered
-// answer and the citations that go with those numbers. citations is only
-// ever populated on "done" — the backend can't renumber [n] markers until it
-// has seen the whole answer, so there is nothing correct to send earlier.
+// Mirrors backend/app/api/v1/chat.py's _stream_events exactly.
+//
+// "retrieved" leads, once — what retrieval found, before the model has seen
+// any of it. These are documents SEARCHED, not sources cited: retrieval
+// returns top_k chunks and the answer usually grounds in a subset, so the two
+// have to stay distinguishable in the UI. Absent entirely on a refusal, where
+// nothing cleared the relevance floor and there is no honest list to show.
+//
+// Then every event up to the last is a raw, UN-renumbered fragment of model
+// output (a "typing" UI has nothing else to show yet); the last carries the
+// final renumbered answer, the citations that go with those numbers, and the
+// measured grounding. citations is only ever populated on "done" — the backend
+// can't renumber [n] markers until it has seen the whole answer, so there is
+// nothing correct to send earlier.
+//
+// grounding is optional so a frontend build newer than the deployed backend
+// (Vercel and Render ship independently) degrades rather than crashes.
 export type ChatStreamEvent =
+  | { type: "retrieved"; documents: RetrievedDocument[] }
   | { type: "delta"; text: string }
-  | { type: "done"; answer: string; citations: Citation[] };
+  | { type: "done"; answer: string; citations: Citation[]; grounding?: Grounding };
 
 // SSE-over-fetch, not EventSource: EventSource is GET-only with no request
 // body, and the question + conversation history have to travel in a POST

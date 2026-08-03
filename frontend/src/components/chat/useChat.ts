@@ -147,7 +147,12 @@ export function useChat(orgSlug: string) {
       let gotDone = false
       try {
         for await (const event of api.chatStream(orgSlug, q, history, controller.signal)) {
-          if (event.type === 'delta') {
+          if (event.type === 'retrieved') {
+            // Retrieval finished; generation hasn't produced a token yet. Phase
+            // stays 'searching' so the answer keeps its skeleton — only the
+            // sources panel has something real to show at this point.
+            patch(localId, replyId, { retrieved: event.documents })
+          } else if (event.type === 'delta') {
             acc += event.text
             patch(localId, replyId, { phase: 'revealing', content: acc })
           } else {
@@ -157,7 +162,12 @@ export function useChat(orgSlug: string) {
             // citations only exist paired with the final numbering — so
             // this must replace the streamed text, not append to it.
             gotDone = true
-            patch(localId, replyId, { phase: 'done', content: event.answer, citations: event.citations })
+            patch(localId, replyId, {
+              phase: 'done',
+              content: event.answer,
+              citations: event.citations,
+              grounding: event.grounding,
+            })
           }
         }
         if (!gotDone) {
