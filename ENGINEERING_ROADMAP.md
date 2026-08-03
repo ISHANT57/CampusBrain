@@ -680,6 +680,45 @@ anomaly-detection path in Pillar 3 (Security), not here.
 
 ---
 
+**ADR-015 — Redis usage boundary audited: cache/rate-limit only, never source of truth**
+· Accepted · 2026-08-03
+**Context.** The brief's rule for Phase 2: Upstash Redis may be used for embedding cache, LLM
+response cache, rate limiting, and temporary metadata — never as the durable source of truth,
+which must stay Postgres. This needed checking against the code, not assumed from intent.
+**Audit method.** Grepped the entire backend (`app/`), the frontend (`frontend/src`), and both
+Docker Compose files, case-insensitively, for `redis`/`upstash`.
+**Finding: already compliant, no code change required for the rule itself.**
+  - The only real usage is `app/infrastructure/cache.py` — a query-embedding cache. Fail-open
+    (`ConnectionError`/timeout → treated as a cache miss, never an exception the caller sees)
+    and off by default (`UPSTASH_REDIS_REST_URL` unset ⇒ every call is a no-op). Losing it
+    loses latency and one Gemini call's cost per miss, never correctness — the literal
+    opposite of a source of truth.
+  - Rate limiting is deliberately **in-memory**, not Redis (`core/rate_limit.py`, consistent
+    with ADR-010's single-worker deployment) — correct at one instance, and moving it to Redis
+    today would be exactly the unnecessary complexity this brief's rules forbid. The migration
+    trigger (`--workers > 1`) was already documented before this audit; this just confirms it
+    still holds.
+  - No LLM-response cache and no "temporary metadata" use exist yet — both allowed, neither
+    built, nothing to audit until they are.
+  - Frontend: zero references. Docker Compose: comments only, confirming no self-hosted Redis
+    container exists in either compose file.
+**Decision.** Encode the finding as a fitness-function test
+(`tests/test_redis_usage_boundary.py`) rather than leaving it as a one-time audit result: it
+scans `app/` for `redis`/`upstash` outside an explicit allow-list, so a future PR that starts
+using Redis as a queue or a session store fails a test with a pointer to this ADR, instead of
+the drift surfacing later as an incident. Proved it actually discriminates (not a test that
+passes regardless) by introducing a throwaway violation, watching it fail, and removing it.
+**Rejected.** Adding Redis usage speculatively (an LLM-response cache, e.g.) just because the
+brief allows it — no measured need for one yet, and this pillar's own rule set forbids
+unnecessary complexity as strongly as it allows the capability.
+**Trade-offs.** The fitness function only catches usage *mentioning* Redis by name; a
+sufficiently indirect abstraction (a generic `Store` interface backed by Redis under a name
+that doesn't say so) would slip past a text grep. Accepted: nothing in this codebase does that
+today, and the cost of a more structural check (import-graph analysis) isn't justified for one
+real call site.
+
+---
+
 ## 6. Production Incident Library
 
 Append-only. All eight are **real**, recovered from code comments and
@@ -1039,6 +1078,7 @@ migrations. That is the one dimension where free infrastructure costs you nothin
 | 2026-08-03 | Pillar 2 (Observability) implemented and verified against real Postgres/Qdrant — logging, request correlation, `/metrics`, `/health/ready`. Pillar 7 (Cost) partially: query-embedding cache (Upstash), not token metering. Retry classification (P1-5) implemented. Rate-limit gaps (P2-14) closed. Audit logging added (upload only — no delete endpoint exists to audit). SSE streaming shipped end-to-end (backend + frontend), citation renumbering handled via a final structured event rather than incremental structured output. **P0-1 implemented** (ADR-012): Postgres-backed `ingestion_jobs` queue, in-process worker via `asyncio` + `lifespan`, `SKIP LOCKED` claiming, stale-lease reaper, minutes-scale backoff, and the upsert-then-prune idempotency fix for the destructive-reindex bug (P0-1(b)). M1 migration done. Reliability Impl 0% → 40% (P0-2 streaming-upload and P0-3 dedup remain open). |
 | 2026-08-03 (2) | **P1-6 implemented** (ADR-013): `LLMProvider`/`EmbeddingProvider` now surface `TokenUsage` alongside their result; `usage_logs` ledger + `GET /api/v1/usage/summary` (totals, daily series, top users, top documents), cost estimated at read time from a pricing table that's correctly empty (free tier). Fail-open by design, deliberately the opposite contract from the audit log. `IngestionJob` gained `user_id` so ingestion-side spend has someone to attribute to. Pillar 7 Impl 0% → 80% — no frontend dashboard yet, and no real paid pricing entered. 12 new tests. |
 | 2026-08-03 (3) | Audit coverage extended to **login** and **search** (ADR-014) — the two endpoints with a real principal that weren't wired up yet. `require_search_access` widened to return `SearchPrincipal(org_id, user_id)` instead of a bare org_id, mechanically updated at its other 4 call sites. **Delete** and **permission changes** confirmed to have no corresponding endpoint (not audited — nothing to audit); **chat** deliberately left to its existing observability event, not a redundant audit row, since it's anonymous by design; **failed logins** deliberately not audited (no principal, rate limit is the real defense). 6 new integration-tier tests (need real Postgres) + 2 existing unit tests updated for the new return type. |
+| 2026-08-03 (4) | **Redis usage boundary audited** (ADR-015) — grepped the whole backend, frontend, and both Docker Compose files for `redis`/`upstash`. Clean: the only real usage is the fail-open, off-by-default embedding cache from an earlier session; rate limiting is deliberately in-memory (ADR-010), not Redis; no LLM-response cache or "temporary metadata" use exists yet. No code change needed for compliance itself. Added `tests/test_redis_usage_boundary.py` as a fitness-function guardrail (fails if Redis/Upstash is mentioned outside an explicit allow-list) — proved it actually discriminates by introducing and removing a throwaway violation. |
 
 ### Companion documents
 
