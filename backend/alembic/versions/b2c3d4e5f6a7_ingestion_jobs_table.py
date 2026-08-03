@@ -9,6 +9,7 @@ from typing import Sequence, Union
 
 from alembic import op
 import sqlalchemy as sa
+from sqlalchemy.dialects import postgresql
 
 
 revision: str = 'b2c3d4e5f6a7'
@@ -16,13 +17,24 @@ down_revision: Union[str, None] = 'a1b2c3d4e5f6'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
-ingestion_job_status = sa.Enum(
-    'pending', 'processing', 'completed', 'failed', name='ingestion_job_status',
+# postgresql.ENUM, not sa.Enum: create_type=False only exists on the dialect
+# type. On generic sa.Enum the kwarg is silently ignored, and create_table
+# then emits its own CREATE TYPE on top of the explicit create() below --
+# which is the bug that broke this migration on every run.
+ingestion_job_status = postgresql.ENUM(
+    'pending', 'processing', 'completed', 'failed',
+    name='ingestion_job_status',
+    create_type=False,
 )
 
 
 def upgrade() -> None:
-    ingestion_job_status.create(op.get_bind())
+    # The type is created here, exactly once, and create_table below is told
+    # not to create it again (create_type=False on the type itself).
+    # checkfirst=True because a prior failed deploy already left this type
+    # behind in production -- this call has to be a no-op there and a real
+    # create on a fresh database.
+    ingestion_job_status.create(op.get_bind(), checkfirst=True)
     op.create_table(
         'ingestion_jobs',
         sa.Column('id', sa.Integer(), nullable=False),
@@ -54,4 +66,4 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_ingestion_jobs_document_id'), table_name='ingestion_jobs')
     op.drop_index(op.f('ix_ingestion_jobs_org_id'), table_name='ingestion_jobs')
     op.drop_table('ingestion_jobs')
-    ingestion_job_status.drop(op.get_bind())
+    ingestion_job_status.drop(op.get_bind(), checkfirst=True)
