@@ -1,6 +1,8 @@
+import asyncio
 import logging
 import time
 import uuid
+from contextlib import asynccontextmanager
 
 # pyrefly: ignore [missing-import]
 from fastapi import Depends, FastAPI, Request
@@ -24,10 +26,30 @@ from app.core.dependencies import require_search_access
 from app.core.observability import configure_logging, request_id_var
 from app.core.rate_limit import limiter
 from app.infrastructure import storage, vector_store
+from app.services import ingestion_queue
 
 configure_logging()
 
-app = FastAPI(title="CampusBrain AI")
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    # The "worker" from Phase 1: an asyncio task in this SAME process, not a
+    # second Render service (the free tier has no free background-worker
+    # slot). Cancelled on shutdown rather than left to be killed mid-poll,
+    # so a graceful restart never looks like the crash the job queue exists
+    # to survive in the first place.
+    worker_task = asyncio.create_task(ingestion_queue.run_worker_loop())
+    try:
+        yield
+    finally:
+        worker_task.cancel()
+        try:
+            await worker_task
+        except asyncio.CancelledError:
+            pass
+
+
+app = FastAPI(title="CampusBrain AI", lifespan=lifespan)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.include_router(auth_router, prefix="/api/v1")

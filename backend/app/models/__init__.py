@@ -6,3 +6,4 @@ from app.models.collection import Collection  # noqa: F401
 from app.models.document import Document  # noqa: F401
 from app.models.chunk import Chunk  # noqa: F401
 from app.models.audit_log import AuditLog  # noqa: F401
+from app.models.ingestion_job import IngestionJob  # noqa: F401

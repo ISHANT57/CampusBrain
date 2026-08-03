@@ -223,7 +223,7 @@ Two axes, deliberately. Design is cheap and Implementation is what counts.
 | # | Pillar | Design | Impl | Status | Priority | Depends on | Effort | Business impact | Interview value |
 |---|---|---|---|---|---|---|---|---|---|
 | 2 | **Observability** | 100% | **0%** | **Designed** | **P0** | — | 1 d | Debuggability; unblocks all | ★★★★★ |
-| 1 | **Reliability** | 20% | 0% | In Progress | **P0** | 2 | 3 d | Prevents data loss | ★★★★★ |
+| 1 | **Reliability** | 20% | **40%** | In Progress | **P0** | 2 | 3 d | Prevents data loss | ★★★★★ |
 | 7 | **Cost Engineering** | 30% | 0% | Not Started | P1 | 2 | 2 h | Makes spend knowable | ★★★★ |
 | 5 | **Evaluation** | 90%¹ | 0% | Not Started | P1 | 2 | 2 d | Unblocks 7 decisions | ★★★★★ |
 | 6 | **Performance** | 40% | 0% | Not Started | P1 | 5, 7 | 2 d | 25× ingest; latency | ★★★ |
@@ -262,14 +262,17 @@ Ordered by **probability × blast radius on this deployment**, not by generic se
 | **Effort** | 3 days |
 | **Depends on** | Pillar 2 (need the request ID to follow work into the job) |
 | **Migration path** | Postgres `jobs` table + `FOR UPDATE SKIP LOCKED` → dedicated worker process → Redis/arq only if job rate exceeds ~10/s |
-| **Status** | Designed 20% · Not started |
+| **Status** | **Implemented** (ADR-012, 2026-08-03) |
 
-Two distinct failures. **(a)** The task runs after the HTTP response, so nothing keeps the
-instance awake; Render sleeps at 15 min idle and a 248-second ingest is well inside that
-window. The task dies, no `except` runs, the document sits at `PROCESSING` forever with no
-reaper. **(b)** `index_document` deletes Qdrant points then chunk rows *before* re-embedding.
-The ordering is correct (chunk id == point id, so points must go first) but a crash in the
-window leaves the document empty — old data gone, new data never written.
+Two distinct failures, both closed. **(a)** The task ran after the HTTP response with nothing
+keeping the instance awake; Render sleeps at 15 min idle and a 248-second ingest was well
+inside that window. Fixed by `app/services/ingestion_queue.py`: work is a durable
+`ingestion_jobs` row, not an in-process callback, and a stale `processing` lease is recovered
+by the reaper every poll cycle, not just at startup. **(b)** `index_document` used to delete
+Qdrant points then chunk rows *before* re-embedding; a crash in that window left the document
+empty. Fixed by reordering to upsert-then-prune — see ADR-012 for the full reasoning.
+**Not yet closed:** streaming upload / memory (P0-2) and API-path dedup (P0-3) are still open;
+this pillar's Impl% reflects P0-1 only.
 
 ---
 
@@ -549,6 +552,47 @@ no backfill migration**, and no code path can forget to update the index.
 
 ---
 
+**ADR-012 — Durable ingestion via a Postgres job table, worker still in-process** · Accepted · 2026-08-03
+**Context.** P0-1: `BackgroundTasks` is non-durable, and Render free's sleep-after-15-min
+behavior turns a 248 s ingest into a real chance of losing the job with no record it ever
+existed. A literal second worker process was considered — Render free has no free
+Background Worker service type, only one free web service, so that option costs money the
+brief for this pillar explicitly ruled out.
+**Decision.** `ingestion_jobs` table (`pending` / `processing` / `completed` / `failed`,
+`attempts`, `next_attempt_at`, `claimed_at`). Claiming is one statement —
+`UPDATE ... WHERE id = (SELECT ... FOR UPDATE SKIP LOCKED LIMIT 1) RETURNING` — so two
+pollers can never double-claim a row. The worker is an `asyncio` task started from
+`main.py`'s `lifespan`, in the same process as the API; each claimed job's actual processing
+runs via `asyncio.to_thread` so a slow ingest doesn't block concurrent requests, matching the
+non-blocking property `BackgroundTasks` already had via Starlette's threadpool. A stale-claim
+reaper runs every poll (not just at startup), resetting any `processing` row whose lease
+(15 min) expired back to `pending` — recovers from a crash or a sleep/restart with no special
+"was I just restarted" logic needed. Retry backoff is 30s/60s/120s… capped at 15 min, plus
+jitter — deliberately minutes-scale, not the seconds-scale backoff in
+`infrastructure/retry.py`, because the failure modes here (a sleeping instance, a multi-chunk
+Gemini 5xx) take longer to clear than a single HTTP call's.
+**Idempotency fix bundled in, because it was the same bug.** `index_document` used to delete
+old chunks/vectors before writing new ones. Qdrant's delete has no transaction, so it took
+effect immediately; a crash during the embedding step that followed left the Postgres row
+looking fine with **zero vectors in Qdrant** — silently unsearchable (P0-1(b)). Reordered to
+upsert-then-prune: new chunks are inserted and their vectors upserted first; old chunks/vectors
+are deleted only once the new ones are confirmed in place. A crash during the risky step now
+leaves the *old* content fully intact instead of half-destroyed, and a retry converges
+normally (re-inserting is idempotent; re-deleting an already-deleted point/row is a no-op).
+**Rejected.** A literal second Render service (not free). Redis as the queue (Phase 2's own
+rule: Redis is cache/rate-limit/ephemeral data, never the durable source of truth — a job
+queue that can silently lose entries on eviction is worse than the BackgroundTasks it replaces).
+**Trade-offs.** `asyncio.to_thread` still shares one process's memory and one Postgres
+connection pool with the request path — a very slow job can still contend for resources,
+just no longer for the event loop itself. `DocumentStatus` has no "retrying" state, so a job
+with attempts remaining reports as `PENDING` again rather than a distinct in-between status.
+**Migration trigger — same as M2/M3, unchanged.** Job rate > ~10/s or ingestion starving the
+request path → extract `run_worker_loop()` into a real second process (no redesign, same
+function). Job rate > ~100/s or fan-out across machines → Redis/arq, jobs table remains the
+source of truth in the meantime.
+
+---
+
 ## 6. Production Incident Library
 
 Append-only. All eight are **real**, recovered from code comments and
@@ -675,7 +719,7 @@ lives or dies here: this is how you demonstrate Level 5 thinking without Level 5
 
 | # | Migration | Current | Trigger | Rollback |
 |---|---|---|---|---|
-| M1 | `BackgroundTasks` → **Postgres `jobs`** (`SKIP LOCKED`) | In-process, non-durable | **Met now** (P0-1) | Feature-flag the job runner; keep the direct call path |
+| M1 | `BackgroundTasks` → **Postgres `jobs`** (`SKIP LOCKED`) | **Done** (ADR-012) | — | Feature-flag the job runner; keep the direct call path |
 | M2 | Postgres queue → dedicated worker process | — | Job rate > ~10/s **or** ingestion starves the request path | Run both roles in one process again |
 | M3 | Postgres queue → Redis/arq | — | Job rate > ~100/s, or fan-out across machines. **Not expected** | Jobs table remains the source of truth |
 | M4 | `ContextVar` → **OpenTelemetry** | ContextVar (designed) | A second process exists (M2) | Both can coexist; OTel is additive |
@@ -905,6 +949,7 @@ migrations. That is the one dimension where free infrastructure costs you nothin
 | Date | Change |
 |---|---|
 | 2026-07-30 | Document created. §1–12 populated. ADR-001/002 imported from `PILLAR_02_OBSERVABILITY.md`; ADR-003–011 back-filled from code comments and `DEPLOYMENT_JOURNAL.md`. INC-001–008 recovered. Baseline scorecard 3.5/10. Redis premise corrected. Verified `git diff --stat HEAD -- backend/ frontend/` empty → all pillars 0% implemented |
+| 2026-08-03 | Pillar 2 (Observability) implemented and verified against real Postgres/Qdrant — logging, request correlation, `/metrics`, `/health/ready`. Pillar 7 (Cost) partially: query-embedding cache (Upstash), not token metering. Retry classification (P1-5) implemented. Rate-limit gaps (P2-14) closed. Audit logging added (upload only — no delete endpoint exists to audit). SSE streaming shipped end-to-end (backend + frontend), citation renumbering handled via a final structured event rather than incremental structured output. **P0-1 implemented** (ADR-012): Postgres-backed `ingestion_jobs` queue, in-process worker via `asyncio` + `lifespan`, `SKIP LOCKED` claiming, stale-lease reaper, minutes-scale backoff, and the upsert-then-prune idempotency fix for the destructive-reindex bug (P0-1(b)). M1 migration done. Reliability Impl 0% → 40% (P0-2 streaming-upload and P0-3 dedup remain open). |
 
 ### Companion documents
 

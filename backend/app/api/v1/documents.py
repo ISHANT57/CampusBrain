@@ -1,7 +1,6 @@
 # pyrefly: ignore [missing-import]
 from fastapi import (
     APIRouter,
-    BackgroundTasks,
     Depends,
     File,
     Form,
@@ -22,7 +21,6 @@ from app.models.document import Document, DocumentStatus
 from app.models.user import User, UserRole
 from app.repositories.document_repository import DocumentRepository
 from app.schemas.document import DocumentListResponse, DocumentPage, DocumentRead, DocumentText
-from app.services.document_processing_service import process_document
 from app.services.document_service import DocumentValidationError, upload_document
 
 router = APIRouter(prefix="/documents", tags=["documents"])
@@ -38,11 +36,17 @@ MAX_DOCUMENT_TEXT_CHARS = 250_000
 # 512Mi box. This doesn't fix the memory issue itself (that's the streaming-
 # upload fix, still open) — it bounds how many of them a leaked admin token
 # or a buggy client script can trigger per minute.
-@router.post("", response_model=DocumentRead, status_code=status.HTTP_201_CREATED)
+#
+# 202 Accepted, not 201: upload_document() already persists the Document AND
+# a durable ingestion_jobs row (app/services/ingestion_queue.py) in one
+# transaction, so the resource exists, but processing genuinely hasn't
+# started -- 202 is the correct code for "accepted, not yet complete",
+# rather than 201's "created and done." The response body is unchanged; only
+# the status code reflects what's actually true now.
+@router.post("", response_model=DocumentRead, status_code=status.HTTP_202_ACCEPTED)
 @limiter.limit("10/minute")
 async def upload(
     request: Request,
-    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     collection_id: int | None = Form(None),
     current_user: User = Depends(require_role(UserRole.ADMIN, UserRole.SUPER_ADMIN)),
@@ -61,14 +65,12 @@ async def upload(
     except DocumentValidationError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
-    # Runs after the response is sent, in the same process — no queue, no
-    # separate worker. Was arq enqueuing onto Redis; process_document itself
-    # never depended on that transport (see its docstring), so this is a pure
-    # infrastructure simplification, not a behavior change to the API: the
-    # client still gets the document back immediately at PENDING/PROCESSING
-    # and polls GET /documents/{id} for status, exactly as before.
-    background_tasks.add_task(process_document, document.id)
-
+    # No BackgroundTasks: the ingestion_jobs row upload_document() just
+    # committed IS the handoff. The in-process worker loop (started from
+    # main.py's lifespan) picks it up on its next poll -- durable across a
+    # restart, unlike a BackgroundTasks callback that dies with the process
+    # that scheduled it. Client still gets the document back immediately at
+    # PENDING and polls GET /documents/{id} for status, exactly as before.
     return document
 
 

@@ -48,6 +48,15 @@ changed), so running it on every boot rather than only before a deploy costs
 nothing, and the script exits on migration failure before ever starting
 uvicorn (`set -e`).
 
+**The ingestion worker needs no separate Render service.** Document processing
+now runs off a durable `ingestion_jobs` table (ADR-012 in
+`ENGINEERING_ROADMAP.md`) instead of `BackgroundTasks`, but the "worker" is an
+`asyncio` task started from `main.py`'s `lifespan` inside the same process —
+Render free has no free Background Worker service type, so this is still a
+single Web Service, same as before. The new `ingestion_jobs` table is created
+by the same `alembic upgrade head` this script already runs on every boot;
+nothing extra to configure.
+
 Two things that aren't optional:
 
 - **`$PORT`, not a hardcoded `8000`.** Render assigns a port via the `PORT`
