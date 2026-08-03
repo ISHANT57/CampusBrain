@@ -27,7 +27,7 @@ def post(monkeypatch):
         calls["json"] = kwargs.get("json")
         return calls["response"]
 
-    monkeypatch.setattr(gemini_provider.httpx, "post", fake_post)
+    monkeypatch.setattr(gemini_provider, "post_with_retry", fake_post)
     return calls
 
 
@@ -35,7 +35,7 @@ def test_returns_the_candidate_text(post):
     post["response"] = stub_response(
         {"candidates": [{"content": {"parts": [{"text": "Fees are 50,000."}]}}]}
     )
-    assert gemini_provider.GeminiProvider().generate("how much?") == "Fees are 50,000."
+    assert gemini_provider.GeminiProvider().generate("how much?").text == "Fees are 50,000."
     assert post["json"] == {"contents": [{"parts": [{"text": "how much?"}]}]}
 
 
@@ -45,7 +45,26 @@ def test_joins_multiple_text_parts_and_skips_non_text(post):
     post["response"] = stub_response(
         {"candidates": [{"content": {"parts": [{"text": "Fees "}, {"thought": True}, {"text": "are 50,000."}]}}]}
     )
-    assert gemini_provider.GeminiProvider().generate("how much?") == "Fees are 50,000."
+    assert gemini_provider.GeminiProvider().generate("how much?").text == "Fees are 50,000."
+
+
+def test_usage_metadata_is_extracted_when_present(post):
+    post["response"] = stub_response({
+        "candidates": [{"content": {"parts": [{"text": "Fees are 50,000."}]}}],
+        "usageMetadata": {"promptTokenCount": 120, "candidatesTokenCount": 8, "totalTokenCount": 128},
+    })
+    result = gemini_provider.GeminiProvider().generate("how much?")
+    assert result.usage.prompt_tokens == 120
+    assert result.usage.completion_tokens == 8
+    assert result.usage.total_tokens == 128
+
+
+def test_usage_is_none_not_zero_when_absent():
+    """Absence means 'the response didn't say', not 'zero tokens spent' --
+    a caller must be able to tell the difference so it doesn't log a false
+    zero-cost row."""
+    payload = {"candidates": [{"content": {"parts": [{"text": "hi"}]}}]}
+    assert gemini_provider._extract_usage(payload) is None
 
 
 def test_empty_candidate_names_the_finish_reason(post):

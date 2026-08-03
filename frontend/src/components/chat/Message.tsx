@@ -226,10 +226,16 @@ export const Message = memo(function Message({
   }
 
   const searching = phase === 'searching'
+  // Citations only exist once the final "done" event arrives (see useChat's
+  // send()) — real streaming means text can already be revealing while the
+  // source list is still empty. Keep the rail's skeleton up across that gap
+  // instead of it disappearing after "searching" and popping back in at the
+  // end, which reads as broken rather than as "still resolving".
+  const sourcesLoading = searching || (phase === 'revealing' && citations.length === 0)
 
   return (
     <Turn kind="assistant" name={brand}>
-      <SourceRail citations={citations} loading={searching} />
+      <SourceRail citations={citations} loading={sourcesLoading} />
 
       {searching ? (
         <AnswerSkeleton />

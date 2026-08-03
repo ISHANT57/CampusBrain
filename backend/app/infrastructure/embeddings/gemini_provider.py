@@ -1,6 +1,6 @@
-import httpx
-
 from app.core.config import settings
+from app.infrastructure.retry import post_with_retry
+from app.infrastructure.usage import TokenUsage
 
 # API contract confirmed against Google's current docs (2026):
 #   POST https://generativelanguage.googleapis.com/v1beta/models/{model}:embedContent
@@ -32,8 +32,8 @@ class GeminiEmbeddingProvider:
     def dimension(self) -> int:
         return self._dimension
 
-    def embed(self, text: str) -> list[float]:
-        response = httpx.post(
+    def _request(self, text: str):
+        return post_with_retry(
             _ENDPOINT.format(model=self._model),
             headers={"x-goog-api-key": settings.gemini_api_key},
             json={
@@ -43,5 +43,17 @@ class GeminiEmbeddingProvider:
             },
             timeout=60.0,
         )
-        response.raise_for_status()
-        return response.json()["embedding"]["values"]
+
+    def embed(self, text: str) -> list[float]:
+        return self._request(text).json()["embedding"]["values"]
+
+    def embed_with_usage(self, text: str) -> tuple[list[float], TokenUsage | None]:
+        payload = self._request(text).json()
+        u = payload.get("usageMetadata")
+        # embedContent's usageMetadata carries only a total -- there is no
+        # separate "completion" side to an embedding call, so it's the whole
+        # cost, not a component of it.
+        usage = TokenUsage(
+            prompt_tokens=u.get("totalTokenCount", 0), completion_tokens=0, total_tokens=u.get("totalTokenCount", 0),
+        ) if u else None
+        return payload["embedding"]["values"], usage

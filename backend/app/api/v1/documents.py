@@ -1,12 +1,12 @@
 # pyrefly: ignore [missing-import]
 from fastapi import (
     APIRouter,
-    BackgroundTasks,
     Depends,
     File,
     Form,
     HTTPException,
     Query,
+    Request,
     UploadFile,
     status,
 )
@@ -14,13 +14,15 @@ from fastapi import (
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.core.dependencies import require_role, require_search_access
+from app.core.dependencies import SearchPrincipal, require_role, require_search_access
+from app.core.rate_limit import limiter
+from app.infrastructure import storage
 from app.models.chunk import Chunk
 from app.models.document import Document, DocumentStatus
 from app.models.user import User, UserRole
 from app.repositories.document_repository import DocumentRepository
 from app.schemas.document import DocumentListResponse, DocumentPage, DocumentRead, DocumentText
-from app.services.document_processing_service import process_document
+from app.services import audit_service
 from app.services.document_service import DocumentValidationError, upload_document
 
 router = APIRouter(prefix="/documents", tags=["documents"])
@@ -31,9 +33,22 @@ router = APIRouter(prefix="/documents", tags=["documents"])
 MAX_DOCUMENT_TEXT_CHARS = 250_000
 
 
-@router.post("", response_model=DocumentRead, status_code=status.HTTP_201_CREATED)
+# No rate limit here previously (P0-2's aggravating factor): an authenticated
+# admin could fire unlimited concurrent uploads, each one a full read into a
+# 512Mi box. This doesn't fix the memory issue itself (that's the streaming-
+# upload fix, still open) — it bounds how many of them a leaked admin token
+# or a buggy client script can trigger per minute.
+#
+# 202 Accepted, not 201: upload_document() already persists the Document AND
+# a durable ingestion_jobs row (app/services/ingestion_queue.py) in one
+# transaction, so the resource exists, but processing genuinely hasn't
+# started -- 202 is the correct code for "accepted, not yet complete",
+# rather than 201's "created and done." The response body is unchanged; only
+# the status code reflects what's actually true now.
+@router.post("", response_model=DocumentRead, status_code=status.HTTP_202_ACCEPTED)
+@limiter.limit("10/minute")
 async def upload(
-    background_tasks: BackgroundTasks,
+    request: Request,
     file: UploadFile = File(...),
     collection_id: int | None = Form(None),
     current_user: User = Depends(require_role(UserRole.ADMIN, UserRole.SUPER_ADMIN)),
@@ -44,6 +59,7 @@ async def upload(
         document = upload_document(
             db,
             org_id=current_user.org_id,
+            user_id=current_user.id,
             collection_id=collection_id,
             filename=file.filename,
             content=content,
@@ -51,14 +67,12 @@ async def upload(
     except DocumentValidationError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
-    # Runs after the response is sent, in the same process — no queue, no
-    # separate worker. Was arq enqueuing onto Redis; process_document itself
-    # never depended on that transport (see its docstring), so this is a pure
-    # infrastructure simplification, not a behavior change to the API: the
-    # client still gets the document back immediately at PENDING/PROCESSING
-    # and polls GET /documents/{id} for status, exactly as before.
-    background_tasks.add_task(process_document, document.id)
-
+    # No BackgroundTasks: the ingestion_jobs row upload_document() just
+    # committed IS the handoff. The in-process worker loop (started from
+    # main.py's lifespan) picks it up on its next poll -- durable across a
+    # restart, unlike a BackgroundTasks callback that dies with the process
+    # that scheduled it. Client still gets the document back immediately at
+    # PENDING and polls GET /documents/{id} for status, exactly as before.
     return document
 
 
@@ -68,7 +82,7 @@ def list_documents(
     collection_id: int | None = Query(default=None),
     limit: int = Query(default=100, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
-    org_id: int = Depends(require_search_access),
+    principal: SearchPrincipal = Depends(require_search_access),
     db: Session = Depends(get_db),
 ):
     """List the documents in this organization's knowledge base.
@@ -81,6 +95,7 @@ def list_documents(
     Paginated because a corpus grows without bound and an unpaginated list
     endpoint is a latent OOM on a 512Mi instance.
     """
+    org_id = principal.org_id
     query = db.query(Document).filter(Document.org_id == org_id)
     if status_filter is not None:
         query = query.filter(Document.status == status_filter)
@@ -95,13 +110,54 @@ def list_documents(
 @router.get("/{document_id}", response_model=DocumentRead)
 def get_document(
     document_id: int,
-    org_id: int = Depends(require_search_access),
+    principal: SearchPrincipal = Depends(require_search_access),
     db: Session = Depends(get_db),
 ):
-    document = DocumentRepository(db, org_id).get(document_id)
+    document = DocumentRepository(db, principal.org_id).get(document_id)
     if document is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
     return document
+
+
+@router.get("/{document_id}/download")
+def download_document(
+    document_id: int,
+    current_user: User = Depends(require_role(UserRole.ADMIN, UserRole.SUPER_ADMIN)),
+    db: Session = Depends(get_db),
+):
+    """A short-lived signed URL for the original file (Phase 9).
+
+    Signed URL, not a proxied byte stream: streaming a 100 MB blob back
+    through this process would put it in a 512 MB box's memory for no
+    reason, and the Supabase bucket stays Private either way -- the URL is
+    the sanctioned way to hand out temporary access to exactly one object.
+
+    Admin-only and 15 minutes, deliberately tighter than storage.py's
+    1-hour default: this hands out access to a raw uploaded document, so the
+    window should be long enough to click and short enough that a leaked URL
+    in a browser history or a chat log is stale.
+
+    Audited: handing out access to a file is exactly the kind of action that
+    needs to be attributable after the fact.
+    """
+    document = DocumentRepository(db, current_user.org_id).get(document_id)
+    if document is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
+    if not document.storage_key:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Document has no stored file")
+
+    url = storage.presigned_url(document.storage_key, expires_in=900)
+    audit_service.record(
+        db,
+        org_id=current_user.org_id,
+        user_id=current_user.id,
+        action="document.download",
+        resource_type="document",
+        resource_id=document.id,
+        detail={"filename": document.filename},
+    )
+    db.commit()
+    return {"url": url, "expires_in": 900}
 
 
 @router.get("/{document_id}/text", response_model=DocumentText)
@@ -109,7 +165,7 @@ def get_document_text(
     document_id: int,
     page_from: int | None = Query(default=None, ge=1),
     page_to: int | None = Query(default=None, ge=1),
-    org_id: int = Depends(require_search_access),
+    principal: SearchPrincipal = Depends(require_search_access),
     db: Session = Depends(get_db),
 ):
     """Return a document's full text, page by page.
@@ -124,6 +180,7 @@ def get_document_text(
     document_id, page_number, chunk_index and text, so this is one ordered
     query plus a group-by.
     """
+    org_id = principal.org_id
     document = DocumentRepository(db, org_id).get(document_id)
     if document is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")

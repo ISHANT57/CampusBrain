@@ -71,7 +71,7 @@ def test_upload_filename_cannot_escape_storage_prefix():
         headers=_auth(token),
         files={"file": ("../../etc/passwd.txt", b"harmless test content", "text/plain")},
     )
-    assert res.status_code == 201, res.text
+    assert res.status_code == 202, res.text  # accepted for durable, async ingestion (Phase 1)
 
     storage_key = res.json()["storage_key"]
     assert ".." not in storage_key

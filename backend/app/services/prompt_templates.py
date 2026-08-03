@@ -1,5 +1,10 @@
 NO_EVIDENCE_RESPONSE = "I don't have information on that in the available documents."
 
+# Bumped whenever build_rag_prompt's wording changes, and logged on every
+# answer (rag_service.answer_question) — so a quality regression can be
+# correlated to the prompt revision that caused it instead of guessed at.
+PROMPT_VERSION = "v1"
+
 
 def build_rag_prompt(question: str, hits: list[dict], history: list[dict] | None = None) -> str:
     """Injects retrieved chunks as numbered context and instructs the model to

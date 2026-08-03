@@ -106,6 +106,14 @@ class Settings(BaseSettings):
     openrouter_api_key: str = ""
     llm_model: str = "openai/gpt-oss-20b:free"
 
+    # Query-embedding cache -- Upstash Redis's free-tier REST API (no TCP
+    # client needed, no self-hosted Redis). Unset (the default) disables the
+    # cache entirely: cache.py treats a missing URL as an always-miss, not an
+    # error, so this feature is fully optional and every existing deploy is
+    # unaffected until both are set.
+    upstash_redis_rest_url: str = ""
+    upstash_redis_rest_token: str = ""
+
     # Comma-separated list, e.g. "https://your-app.vercel.app,http://localhost:5173".
     # "*" (the default) is fine for local dev only — a split-origin deploy
     # (Vercel frontend, Render backend) needs the real Vercel origin here, or

@@ -9,6 +9,7 @@ from app.core.upload_policy import MAX_UPLOAD_SIZE_BYTES, is_supported
 from app.infrastructure import storage
 from app.models.document import Document, DocumentStatus
 from app.repositories.collection_repository import CollectionRepository
+from app.services import audit_service, ingestion_queue
 
 
 class DocumentValidationError(Exception):
@@ -19,6 +20,7 @@ def upload_document(
     db: Session,
     *,
     org_id: int,
+    user_id: int,
     collection_id: int | None,
     filename: str,
     content: bytes,
@@ -60,6 +62,22 @@ def upload_document(
         storage_key=storage_key,
     )
     db.add(document)
+    db.flush()  # assigns document.id without committing, so the audit row below can reference it
+
+    audit_service.record(
+        db,
+        org_id=org_id,
+        user_id=user_id,
+        action="document.upload",
+        resource_type="document",
+        resource_id=document.id,
+        detail={"filename": filename, "size_bytes": len(content)},
+    )
+    ingestion_queue.enqueue(db, org_id=org_id, document_id=document.id, user_id=user_id)
+
+    # One commit for all three rows: a document with no ingestion job would
+    # sit at PENDING forever with nothing to ever pick it up; one with no
+    # audit trail is an untracked mutation. They land together or not at all.
     db.commit()
     db.refresh(document)
     return document
