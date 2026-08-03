@@ -14,7 +14,7 @@ from fastapi import (
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.core.dependencies import require_role, require_search_access
+from app.core.dependencies import SearchPrincipal, require_role, require_search_access
 from app.core.rate_limit import limiter
 from app.models.chunk import Chunk
 from app.models.document import Document, DocumentStatus
@@ -80,7 +80,7 @@ def list_documents(
     collection_id: int | None = Query(default=None),
     limit: int = Query(default=100, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
-    org_id: int = Depends(require_search_access),
+    principal: SearchPrincipal = Depends(require_search_access),
     db: Session = Depends(get_db),
 ):
     """List the documents in this organization's knowledge base.
@@ -93,6 +93,7 @@ def list_documents(
     Paginated because a corpus grows without bound and an unpaginated list
     endpoint is a latent OOM on a 512Mi instance.
     """
+    org_id = principal.org_id
     query = db.query(Document).filter(Document.org_id == org_id)
     if status_filter is not None:
         query = query.filter(Document.status == status_filter)
@@ -107,10 +108,10 @@ def list_documents(
 @router.get("/{document_id}", response_model=DocumentRead)
 def get_document(
     document_id: int,
-    org_id: int = Depends(require_search_access),
+    principal: SearchPrincipal = Depends(require_search_access),
     db: Session = Depends(get_db),
 ):
-    document = DocumentRepository(db, org_id).get(document_id)
+    document = DocumentRepository(db, principal.org_id).get(document_id)
     if document is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
     return document
@@ -121,7 +122,7 @@ def get_document_text(
     document_id: int,
     page_from: int | None = Query(default=None, ge=1),
     page_to: int | None = Query(default=None, ge=1),
-    org_id: int = Depends(require_search_access),
+    principal: SearchPrincipal = Depends(require_search_access),
     db: Session = Depends(get_db),
 ):
     """Return a document's full text, page by page.
@@ -136,6 +137,7 @@ def get_document_text(
     document_id, page_number, chunk_index and text, so this is one ordered
     query plus a group-by.
     """
+    org_id = principal.org_id
     document = DocumentRepository(db, org_id).get(document_id)
     if document is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")

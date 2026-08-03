@@ -23,7 +23,7 @@ from app.api.v1.search import router as search_router
 from app.api.v1.usage import router as usage_router
 from app.core import database, metrics
 from app.core.config import settings
-from app.core.dependencies import require_search_access
+from app.core.dependencies import SearchPrincipal, require_search_access
 from app.core.observability import configure_logging, request_id_var
 from app.core.rate_limit import limiter
 from app.infrastructure import storage, vector_store
@@ -184,7 +184,7 @@ def readiness() -> JSONResponse:
 
 
 @app.get("/metrics")
-def metrics_endpoint(_org_id: int = Depends(require_search_access)) -> dict:
+def metrics_endpoint(_principal: SearchPrincipal = Depends(require_search_access)) -> dict:
     # Admin-only: query volume, latency and refusal rate per tenant are
     # operational detail, not something to expose publicly.
     return metrics.snapshot()

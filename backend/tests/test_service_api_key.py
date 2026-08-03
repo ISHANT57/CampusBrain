@@ -32,7 +32,9 @@ class FakeRequest:
 # --- the new path -----------------------------------------------------------
 
 def test_valid_api_key_resolves_to_the_configured_org(service_key_enabled):
-    assert dependencies.require_search_access(x_api_key=VALID_KEY, credentials=None, db=None) == 1
+    principal = dependencies.require_search_access(x_api_key=VALID_KEY, credentials=None, db=None)
+    assert principal.org_id == 1
+    assert principal.user_id is None  # no user row for a machine caller -- must not be guessed at
 
 
 def test_wrong_api_key_is_rejected(service_key_enabled):
@@ -44,7 +46,7 @@ def test_wrong_api_key_is_rejected(service_key_enabled):
 def test_api_key_path_never_touches_the_database(service_key_enabled):
     # db=None would raise AttributeError if the key path fell through to the
     # JWT branch. Passing None is the assertion.
-    assert dependencies.require_search_access(x_api_key=VALID_KEY, credentials=None, db=None) == 1
+    assert dependencies.require_search_access(x_api_key=VALID_KEY, credentials=None, db=None).org_id == 1
 
 
 def test_feature_is_off_when_unconfigured(monkeypatch):
@@ -66,13 +68,17 @@ def _admin() -> User:
 
 def test_admin_jwt_still_works_with_no_api_key(service_key_enabled, monkeypatch):
     monkeypatch.setattr(dependencies, "get_current_user", lambda c, d: _admin())
-    assert dependencies.require_search_access(x_api_key=None, credentials="tok", db=None) == 7
+    principal = dependencies.require_search_access(x_api_key=None, credentials="tok", db=None)
+    assert principal.org_id == 7
+    assert principal.user_id == 99  # a real admin caller CAN be attributed, unlike a service key
 
 
 def test_admin_jwt_still_works_when_the_feature_is_disabled(monkeypatch):
     monkeypatch.setattr(settings, "service_api_key", "")
     monkeypatch.setattr(dependencies, "get_current_user", lambda c, d: _admin())
-    assert dependencies.require_search_access(x_api_key=None, credentials="tok", db=None) == 7
+    principal = dependencies.require_search_access(x_api_key=None, credentials="tok", db=None)
+    assert principal.org_id == 7
+    assert principal.user_id == 99
 
 
 def test_non_admin_jwt_is_still_forbidden(service_key_enabled, monkeypatch):

@@ -640,6 +640,46 @@ from the actual pricing page. A second embedding-heavy caller emerges → recons
 
 ---
 
+**ADR-014 — Audit coverage extended to every endpoint with a real principal, not the full
+requested list** · Accepted · 2026-08-03
+**Context.** The brief asked for audit coverage on seven actions: login, upload, delete, chat,
+search, admin actions, permission changes. Upload was already covered (Phase 4). The other
+six needed an honest audit against what the API actually has, not an assumption that all
+seven exist.
+**Decision.** Extended coverage to **login** (`auth.py`) and **search** (`search.py`) —
+both have a real, identified principal (a JWT user, or a service API key) and were simply
+never wired up. `require_search_access` (`app/core/dependencies.py`) widened its return type
+from a bare `org_id: int` to `SearchPrincipal(org_id, user_id)`, so `user_id` — None for a
+service key, a real id for an admin JWT — survives to the audit call without a second lookup.
+Every other caller of that dependency (`GET /documents`, `GET /documents/{id}`,
+`GET /documents/{id}/text`, `GET /metrics`) updated mechanically to read `.org_id`; none of
+them needed the new field, and none of their behavior changed.
+**The other four, deliberately not built.**
+  - **Delete** and **permission changes** have no corresponding endpoint anywhere in this
+    API. Auditing a mutation that cannot happen would be a test for fiction, not a feature —
+    `audit_service.py`'s docstring now names this explicitly, and the moment either endpoint
+    exists, it routes through `audit_service.record()` the same way upload/login/search do.
+  - **Chat** is anonymous by design (ADR-008) — there is no principal to attribute a turn to.
+    It's already durably logged via `rag_service`'s `rag_answer` observability event (Pillar
+    2), which is the right layer for a high-volume, unauthenticated path; a redundant
+    audit_logs row per chat turn would multiply table volume for a "who" field that's always
+    null.
+  - **Failed logins** have no principal either — a typo'd email resolves to no user row at
+    all, so there's nothing to attach the row to. The 5/min rate limit on `/auth/login` is the
+    actual brute-force defense; failed-attempt monitoring is a Phase 9 (security) concern, not
+    an accountability one, and conflating the two would blur what an audit log is *for*.
+**Rejected.** Auditing every /search call including anonymous ones — /search has no anonymous
+path (`require_search_access` always demands a credential), so this wasn't a real option, just
+confirms the endpoint already had the right shape for this.
+**Trade-offs.** Search's audit `detail` stores the query text truncated to 200 chars, the same
+retention call already made for chat questions (Pillar 2) — the highest-value debugging field,
+logged as-is rather than redacted, with the same PII posture already accepted there.
+**Migration trigger.** A delete or role-management endpoint ships → route it through
+`audit_service.record()`. Failed-login volume becomes a real signal → build the
+anomaly-detection path in Pillar 3 (Security), not here.
+
+---
+
 ## 6. Production Incident Library
 
 Append-only. All eight are **real**, recovered from code comments and
@@ -833,7 +873,7 @@ Legend: ✅ done · 🟡 partial · ❌ missing · N/A justified
 | Input validation | 🟡 | MIME/extension **pair** allow-list, real-byte sniffing, Pydantic bounds | Size checked **after** buffering (P0-2) | **P0** |
 | Rate limiting | 🟡 | 120/min chat, 5/min login; key **verified** before bucketing | None on `/search`, `/documents` (P2-14); in-memory (P2-9) | P1 |
 | Secret management | 🟡 | Env vars; credentials never logged; key hashes truncated | No rotation procedure | P3 |
-| Audit logging | ❌ | — | Who uploaded/deleted what, when | P2 |
+| Audit logging | 🟡 | Upload, login, search — fails **closed** (ADR-013/014) | No delete/role-change endpoint exists yet to audit | P2 |
 | Prompt-injection defence | 🟡 | 5 regexes on retrieved text; admin-only upload bounds the surface | No role separation; **history unsanitised** (P2-12) | P1 |
 | PII handling | ❌ | Manual corpus curation | No detection/redaction; no enforcement | P3 (see §4 P3) |
 | **Observability** | ❌ | 500s logged w/ traceback; `/health` correctly dependency-free | Everything in Pillar 2 | **P0** |
@@ -998,6 +1038,7 @@ migrations. That is the one dimension where free infrastructure costs you nothin
 | 2026-07-30 | Document created. §1–12 populated. ADR-001/002 imported from `PILLAR_02_OBSERVABILITY.md`; ADR-003–011 back-filled from code comments and `DEPLOYMENT_JOURNAL.md`. INC-001–008 recovered. Baseline scorecard 3.5/10. Redis premise corrected. Verified `git diff --stat HEAD -- backend/ frontend/` empty → all pillars 0% implemented |
 | 2026-08-03 | Pillar 2 (Observability) implemented and verified against real Postgres/Qdrant — logging, request correlation, `/metrics`, `/health/ready`. Pillar 7 (Cost) partially: query-embedding cache (Upstash), not token metering. Retry classification (P1-5) implemented. Rate-limit gaps (P2-14) closed. Audit logging added (upload only — no delete endpoint exists to audit). SSE streaming shipped end-to-end (backend + frontend), citation renumbering handled via a final structured event rather than incremental structured output. **P0-1 implemented** (ADR-012): Postgres-backed `ingestion_jobs` queue, in-process worker via `asyncio` + `lifespan`, `SKIP LOCKED` claiming, stale-lease reaper, minutes-scale backoff, and the upsert-then-prune idempotency fix for the destructive-reindex bug (P0-1(b)). M1 migration done. Reliability Impl 0% → 40% (P0-2 streaming-upload and P0-3 dedup remain open). |
 | 2026-08-03 (2) | **P1-6 implemented** (ADR-013): `LLMProvider`/`EmbeddingProvider` now surface `TokenUsage` alongside their result; `usage_logs` ledger + `GET /api/v1/usage/summary` (totals, daily series, top users, top documents), cost estimated at read time from a pricing table that's correctly empty (free tier). Fail-open by design, deliberately the opposite contract from the audit log. `IngestionJob` gained `user_id` so ingestion-side spend has someone to attribute to. Pillar 7 Impl 0% → 80% — no frontend dashboard yet, and no real paid pricing entered. 12 new tests. |
+| 2026-08-03 (3) | Audit coverage extended to **login** and **search** (ADR-014) — the two endpoints with a real principal that weren't wired up yet. `require_search_access` widened to return `SearchPrincipal(org_id, user_id)` instead of a bare org_id, mechanically updated at its other 4 call sites. **Delete** and **permission changes** confirmed to have no corresponding endpoint (not audited — nothing to audit); **chat** deliberately left to its existing observability event, not a redundant audit row, since it's anonymous by design; **failed logins** deliberately not audited (no principal, rate limit is the real defense). 6 new integration-tier tests (need real Postgres) + 2 existing unit tests updated for the new return type. |
 
 ### Companion documents
 
