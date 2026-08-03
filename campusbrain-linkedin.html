@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CampusBrain &mdash; LinkedIn Document (4:5)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  /* ---------------------------------------------------------------------------
+     Format: 1080 x 1350 (4:5 portrait).
+
+     Not 16:9. A LinkedIn document post is read on a phone, roughly 350 CSS px
+     wide -- a 16:9 slide scaled to that width renders 12px table text at about
+     3.5px. Portrait 4:5 also occupies far more vertical feed space, which is
+     the only thing that buys a second of attention.
+
+     Consequence that drives every other decision here: the smallest type in
+     this deck is 22px at 1080 wide, which is ~7px on a phone. That budget only
+     stretches to ONE idea per slide. Every slide below carries one.
+
+     Every non-ASCII glyph is an HTML entity, never a literal -- authoring with
+     literal arrows is what made the previous deck render as mojibake.
+     --------------------------------------------------------------------------- */
+  :root{
+    --ink:#0B0F19;
+    --body:#3F4654;
+    --mute:#767E8E;
+    --hair:#E4E7EC;
+    --paper:#FFFFFF;
+    --wash:#F7F8FA;
+    --blue:#1D4ED8;
+    --blue-wash:#EEF3FF;
+    --green:#0F766E;
+    --green-wash:#E9F7F5;
+    --red:#B42318;
+    --red-wash:#FEF3F2;
+    --amber:#B54708;
+    --amber-wash:#FFFAEB;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{background:#0B1220;font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;
+    color:var(--ink);-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+  .mono{font-family:'JetBrains Mono',ui-monospace,SFMono-Regular,Menlo,monospace}
+
+  .deck{display:flex;flex-direction:column;align-items:center;gap:40px;padding:48px 0 72px}
+  .note{color:#DDE3EC;text-align:center;max-width:660px}
+  .note h1{font-size:22px;font-weight:700;letter-spacing:-.02em}
+  .note p{color:#8B96A8;font-size:13.5px;margin-top:8px;line-height:1.65}
+
+  /* ---------- page shell ---------- */
+  .pg{width:1080px;height:1350px;background:var(--paper);position:relative;overflow:hidden;
+    box-shadow:0 30px 70px -18px rgba(2,6,23,.6);padding:82px 80px 96px;display:flex;flex-direction:column}
+  .kick{font-size:21px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--blue)}
+  .kick.g{color:var(--green)} .kick.r{color:var(--red)} .kick.a{color:var(--amber)}
+  h2{font-size:68px;line-height:1.04;font-weight:800;letter-spacing:-.035em;margin-top:30px}
+  h2.sm{font-size:58px}
+  .lede{font-size:29px;line-height:1.45;color:var(--body);font-weight:500;letter-spacing:-.012em;margin-top:26px}
+  .lede b{color:var(--ink);font-weight:700}
+  .fill{flex:1;min-height:0}
+
+  .base{position:absolute;left:80px;right:80px;bottom:52px;display:flex;justify-content:space-between;align-items:baseline}
+  .base .who{font-size:20px;font-weight:700;letter-spacing:-.01em;color:var(--ink)}
+  .base .who span{color:var(--mute);font-weight:500}
+  .base .num{font-size:20px;font-weight:700;color:var(--mute);letter-spacing:.06em}
+  .hair{position:absolute;left:80px;right:80px;bottom:104px;height:1px;background:var(--hair)}
+
+  /* ---------- 01 cover ---------- */
+  .cover{background:var(--ink);padding-top:96px}
+  .cover .kick{color:#7DA2FF}
+  .cover h2{color:#fff;font-size:82px;letter-spacing:-.04em;line-height:1.0;margin-top:36px}
+  .cover .lede{color:#AEB8C8;font-size:31px;margin-top:34px}
+  .cover .lede b{color:#fff}
+  .cover .hair{background:#242C3D}
+  .cover .base .who{color:#fff} .cover .base .who span{color:#71809A}
+  .cover .base .num{color:#71809A}
+  .tags{display:flex;flex-wrap:wrap;gap:12px;margin-bottom:8px}
+  .tag{border:1px solid #2A3346;border-radius:999px;padding:11px 22px;font-size:21px;font-weight:600;color:#AEB8C8}
+  .tag.on{border-color:#3A63C8;background:#131C33;color:#9DBBFF}
+  /* Fills the middle of the cover. Editorial negative space is fine; a void
+     this size reads as an unfinished slide, so it earns its place with three
+     facts that state the thesis rather than decorating it. */
+  .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:#242C3D;
+    border:1px solid #242C3D;border-radius:18px;overflow:hidden;margin-top:auto;margin-bottom:56px}
+  .stat{background:var(--ink);padding:34px 28px}
+  .stat .v{font-size:56px;font-weight:800;letter-spacing:-.04em;color:#fff;line-height:1}
+  .stat .v.z{color:#7DA2FF}
+  .stat .k{font-size:20px;line-height:1.35;color:#8B96A8;margin-top:14px;font-weight:500}
+
+  /* ---------- big statement ---------- */
+  .stmt{font-size:46px;line-height:1.24;font-weight:700;letter-spacing:-.028em;margin-top:34px}
+  .stmt .hi{color:var(--blue)} .stmt .hg{color:var(--green)}
+
+  /* ---------- two-column compare ---------- */
+  .vs{display:grid;grid-template-columns:1fr 1fr;gap:26px;margin-top:40px}
+  .box{border:1px solid var(--hair);border-radius:20px;padding:32px}
+  .box.bad{background:var(--red-wash);border-color:#FDD9D5}
+  .box.good{background:var(--green-wash);border-color:#C4E9E3}
+  .box .bt{font-size:19px;font-weight:700;letter-spacing:.13em;text-transform:uppercase;color:var(--mute)}
+  .box.bad .bt{color:var(--red)} .box.good .bt{color:var(--green)}
+  .box .bh{font-size:34px;font-weight:800;letter-spacing:-.025em;margin-top:16px;line-height:1.15}
+  .box .bp{font-size:23px;line-height:1.5;color:var(--body);margin-top:18px}
+  .box .bp b{color:var(--ink);font-weight:700}
+
+  /* ---------- the fake badge ---------- */
+  .fake{display:inline-flex;align-items:center;gap:12px;background:#fff;border:2px solid #FDA29B;
+    border-radius:999px;padding:16px 30px;font-size:28px;font-weight:800;color:var(--red);margin-top:26px;position:relative}
+  .fake::after{content:'';position:absolute;left:14px;right:14px;top:50%;height:3px;background:var(--red);transform:rotate(-6deg)}
+
+  /* ---------- data readout ---------- */
+  .read{background:#fff;border:1px solid #C4E9E3;border-radius:16px;padding:8px 26px;margin-top:26px}
+  .read .rw{display:flex;justify-content:space-between;align-items:baseline;padding:17px 0}
+  .read .rw + .rw{border-top:1px solid #EAF6F4}
+  .read .rk{font-size:23px;color:var(--body)}
+  .read .rv{font-size:26px;font-weight:700;color:var(--ink)}
+  .read .rv small{font-size:20px;font-weight:500;color:var(--mute)}
+
+  /* ---------- numbered stack ---------- */
+  .stack{margin-top:36px;display:flex;flex-direction:column}
+  .st{display:grid;grid-template-columns:78px 1fr;gap:26px;padding:28px 0;border-bottom:1px solid var(--hair)}
+  .st:last-child{border-bottom:0}
+  .st .n{font-size:34px;font-weight:800;color:var(--blue);letter-spacing:-.03em;line-height:1}
+  .st .h{font-size:30px;font-weight:700;letter-spacing:-.02em;line-height:1.25}
+  .st .p{font-size:23px;line-height:1.5;color:var(--body);margin-top:9px}
+  .st .p b{color:var(--ink);font-weight:600}
+
+  /* ---------- timeline ---------- */
+  .tl{margin-top:34px;display:flex;flex-direction:column}
+  .tr{display:grid;grid-template-columns:196px 1fr;gap:28px;padding:26px 0;border-bottom:1px solid var(--hair)}
+  .tr:last-child{border-bottom:0}
+  .tr .w{font-size:20px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--mute);padding-top:6px}
+  .tr.hit .w{color:var(--red)} .tr.fix .w{color:var(--green)}
+  .tr .t{font-size:25px;line-height:1.44;color:var(--body)}
+  .tr .t b{color:var(--ink);font-weight:700}
+  .term{background:var(--ink);border-radius:12px;padding:18px 22px;margin-top:16px;
+    font-size:19px;color:#8FC7FF;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+  /* ---------- two lists ---------- */
+  .lists{display:grid;grid-template-columns:1fr 1fr;gap:30px;margin-top:38px}
+  .lh{font-size:20px;font-weight:700;letter-spacing:.13em;text-transform:uppercase;padding-bottom:18px;border-bottom:2px solid}
+  .lh.y{color:var(--blue);border-color:var(--blue)}
+  .lh.n{color:var(--amber);border-color:var(--amber)}
+  .li{padding:21px 0;border-bottom:1px solid var(--hair)}
+  .li:last-child{border-bottom:0}
+  .li .t{font-size:25px;font-weight:700;letter-spacing:-.015em}
+  .li .d{font-size:21px;line-height:1.44;color:var(--mute);margin-top:6px}
+
+  /* ---------- status chips ---------- */
+  .sgrid{margin-top:36px;display:flex;flex-direction:column;gap:14px}
+  .srow{display:grid;grid-template-columns:150px 1fr;gap:24px;align-items:center;
+    border:1px solid var(--hair);border-radius:15px;padding:22px 26px}
+  .chip{font-size:18px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;text-align:center;
+    padding:9px 0;border-radius:999px}
+  .chip.b{background:var(--green-wash);color:var(--green)}
+  .chip.p{background:var(--amber-wash);color:var(--amber)}
+  .chip.g{background:var(--red-wash);color:var(--red)}
+  .srow .txt{font-size:24px;line-height:1.4;color:var(--body)}
+  .srow .txt b{color:var(--ink);font-weight:700}
+
+  /* ---------- close ---------- */
+  .close{background:var(--ink)}
+  .close .kick{color:#7DA2FF}
+  .close h2{color:#fff;font-size:64px;letter-spacing:-.035em}
+  .close .lede{color:#AEB8C8}
+  .close .hair{background:#242C3D}
+  .close .base .who{color:#fff} .close .base .who span{color:#71809A}
+  .close .base .num{color:#71809A}
+  .ask{border:1px solid #2A3346;border-radius:20px;padding:34px;margin-top:auto;margin-bottom:14px;background:#111A2C}
+  .ask .q{color:#fff;font-size:31px;font-weight:700;line-height:1.32;letter-spacing:-.02em}
+  .ask .a{color:#8B96A8;font-size:23px;line-height:1.5;margin-top:16px}
+
+  @media print{
+    @page{size:1080px 1350px;margin:0}
+    html,body{background:#fff}
+    .deck{padding:0;gap:0}
+    .note{display:none}
+    .pg{box-shadow:none;page-break-after:always;page-break-inside:avoid}
+    .pg:last-child{page-break-after:auto}
+  }
+</style>
+</head>
+<body>
+<div class="deck">
+
+<div class="note">
+  <h1>CampusBrain &mdash; LinkedIn document post</h1>
+  <p>10 pages &middot; 1080 &times; 1350 (4:5 portrait, the ratio LinkedIn documents render largest at) &middot; Open in a browser and <b>Print &rarr; Save as PDF</b>, or use the generated PDF directly.</p>
+</div>
+
+<!-- ============================== 01 ============================== -->
+<section class="pg cover">
+  <div class="kick">Engineering case study</div>
+  <h2>Building a RAG demo takes an afternoon.</h2>
+  <div class="lede">Building one that stays correct when a deploy fails halfway through is <b>a different engineering problem.</b></div>
+  <div class="stats">
+    <div class="stat"><div class="v">17</div><div class="k">architecture decisions recorded, with rejected alternatives</div></div>
+    <div class="stat"><div class="v">87</div><div class="k">automated tests in the fast tier, run on every push</div></div>
+    <div class="stat"><div class="v z">0</div><div class="k">metrics reported that nothing actually measured</div></div>
+  </div>
+  <div class="tags">
+    <span class="tag on">Multi&#8209;tenant</span>
+    <span class="tag on">Durable ingestion</span>
+    <span class="tag">Cited answers</span>
+    <span class="tag">Cost attribution</span>
+    <span class="tag">Audit trail</span>
+    <span class="tag">512&nbsp;MB, one worker</span>
+  </div>
+  <div class="hair"></div>
+  <div class="base"><div class="who">CampusBrain <span>&middot; AI knowledge platform</span></div><div class="num">01 / 10</div></div>
+</section>
+
+<!-- ============================== 02 ============================== -->
+<section class="pg">
+  <div class="kick">The problem</div>
+  <h2>A demo has one path.<br>A system has all of them.</h2>
+  <div class="lede">The tutorial version does upload &rarr; chunk &rarr; embed &rarr; answer. Every box works, and none of them says what happens when the process dies <b>between two of them.</b></div>
+  <div class="stmt">
+    Changing one thing &mdash; upload returns <span class="hi">202 Accepted</span> in under a second, and the work continues without the request &mdash; forces almost everything else in this system to exist.
+  </div>
+  <div class="lede" style="margin-top:34px">Durable queue. Atomic claim. Lease expiry. Bounded retry. Idempotent re&#8209;index. Tenant scoping on every read. An audit row in the same transaction.<br><br><b>None of that is an AI problem.</b></div>
+  <div class="hair"></div>
+  <div class="base"><div class="who">CampusBrain <span>&middot; the work after the demo</span></div><div class="num">02 / 10</div></div>
+</section>
+
+<!-- ============================== 03 ============================== -->
+<section class="pg">
+  <div class="kick r">Engineering honesty</div>
+  <h2 class="sm">The decision I'd defend hardest is one where I removed a feature.</h2>
+  <div class="vs">
+    <div class="box bad">
+      <div class="bt">Didn't ship</div>
+      <div class="bh">A confidence badge</div>
+      <div class="fake">High Confidence</div>
+      <div class="bp">It demos beautifully. Most RAG tutorials ship one.<br><br>But a label means picking cutoffs &mdash; above 0.7 is &ldquo;High&rdquo;. I had <b>no labelled dataset</b> to validate a single one of those numbers against.</div>
+    </div>
+    <div class="box good">
+      <div class="bt">Shipped instead</div>
+      <div class="bh">The measurements</div>
+      <div class="read">
+        <div class="rw"><span class="rk">Documents cited</span><span class="rv">3</span></div>
+        <div class="rw"><span class="rk">Excerpts used</span><span class="rv">9 <small>of 14</small></span></div>
+        <div class="rw"><span class="rk">Closest match</span><span class="rv mono">0.71</span></div>
+        <div class="rw"><span class="rk">Refusal floor</span><span class="rv mono">0.35</span></div>
+      </div>
+      <div class="bp">The score is <b>never shown without the floor it was compared against.</b> 0.71 means nothing alone.</div>
+    </div>
+  </div>
+  <div class="stmt" style="font-size:38px;margin-top:auto;margin-bottom:14px">An invented metric is worse than a missing one. A missing metric gets <span class="hg">questioned</span>. An invented one gets <span class="hi">quoted</span>.</div>
+  <div class="hair"></div>
+  <div class="base"><div class="who">CampusBrain <span>&middot; grounding, not verdicts</span></div><div class="num">03 / 10</div></div>
+</section>
+
+<!-- ============================== 04 ============================== -->
+<section class="pg">
+  <div class="kick">Trade-off 01</div>
+  <h2>Postgres for the job queue. Not Redis.</h2>
+  <div class="lede">Redis is faster and it is the conventional answer. I still chose the slower one.</div>
+  <div class="stack">
+    <div class="st">
+      <div class="n">01</div>
+      <div><div class="h">A dropped job is data loss</div>
+      <div class="p">Not a slow request. An uploaded document that silently never indexes is the worst failure this system has, because <b>nobody finds out.</b></div></div>
+    </div>
+    <div class="st">
+      <div class="n">02</div>
+      <div><div class="h">Postgres was already there</div>
+      <div class="p">Already transactional, already backed up, already the source of truth. Redis would have been <b>a second stateful system</b> to operate for durability I had.</div></div>
+    </div>
+    <div class="st">
+      <div class="n">03</div>
+      <div><div class="h">The claim is atomic by construction</div>
+      <div class="p"><span class="mono">FOR UPDATE SKIP LOCKED</span> makes double-processing impossible, rather than unlikely. There is an integration test that proves it.</div></div>
+    </div>
+    <div class="st">
+      <div class="n">04</div>
+      <div><div class="h">The queue is inspectable</div>
+      <div class="p">It is a table. Debugging a stuck job at 3am is a <span class="mono">SELECT</span>, not a client library.</div></div>
+    </div>
+  </div>
+  <div class="hair"></div>
+  <div class="base"><div class="who">CampusBrain <span>&middot; durability over speed</span></div><div class="num">04 / 10</div></div>
+</section>
+
+<!-- ============================== 05 ============================== -->
+<section class="pg">
+  <div class="kick">Trade-off 02</div>
+  <h2>Redis caches. That's all.<br>A test enforces it.</h2>
+  <div class="lede">A cache miss costs milliseconds. A lost queue job costs data. Those two failures should never share a system &mdash; and a note in a README does not stop the next person from mixing them.</div>
+  <div class="stmt">So the boundary is <span class="hi">a test that fails the build</span> if any file outside an explicit allow&#8209;list imports the cache.</div>
+  <div class="lede" style="margin-top:38px">It asserts on <b>source code, not behaviour</b>, which is an unusual thing for a test to do.<br><br>I kept it because conventions rot and tests don't. I verified it actually discriminates by introducing a deliberate violation and watching it fail, then removing it.</div>
+  <div class="hair"></div>
+  <div class="base"><div class="who">CampusBrain <span>&middot; architecture as a test</span></div><div class="num">05 / 10</div></div>
+</section>
+
+<!-- ============================== 06 ============================== -->
+<section class="pg">
+  <div class="kick r">Incident</div>
+  <h2>Six hours of silence.</h2>
+  <div class="lede">The outage had nothing to do with the AI. Neither did my first fix.</div>
+  <div class="tl">
+    <div class="tr hit"><div class="w">Symptom</div><div class="t">TLS completed. Request fully sent. <b>Zero bytes back</b> &mdash; across three attempts up to 90 seconds. Not a cold start.</div></div>
+    <div class="tr hit"><div class="w">Cause</div><div class="t">A migration created a Postgres enum type, then <span class="mono">create_table</span> created <b>the same type again.</b> It could never have succeeded. The first deploy left the type behind, so every boot afterwards hit the identical wall &mdash; and migrations run before the server starts.
+      <div class="term">DuplicateObject: type "ingestion_job_status" already exists</div></div></div>
+    <div class="tr hit"><div class="w">My first fix</div><div class="t"><b>Also wrong.</b> I set <span class="mono">create_type=False</span> on a generic enum &mdash; a parameter that only exists on the dialect-specific type and is <b>silently ignored</b> there. Same error, one line lower.</div></div>
+    <div class="tr fix"><div class="w">Real fix</div><div class="t">The correct type, tolerant of the orphan already in production. This time I <b>compiled the DDL and counted the statements</b> before claiming it worked: two before, one after.</div></div>
+  </div>
+  <div class="stmt" style="font-size:38px;margin-top:auto;margin-bottom:10px">Verify, don't reason &mdash; <span class="hi">especially about your own fix.</span></div>
+  <div class="hair"></div>
+  <div class="base"><div class="who">CampusBrain <span>&middot; the bug was in a migration</span></div><div class="num">06 / 10</div></div>
+</section>
+
+<!-- ============================== 07 ============================== -->
+<section class="pg">
+  <div class="kick a">Evaluation</div>
+  <h2 class="sm">What I measure &mdash; and what I refuse to.</h2>
+  <div class="lede">The right column is the harder engineering decision.</div>
+  <div class="lists">
+    <div>
+      <div class="lh y">Measured</div>
+      <div class="li"><div class="t">Refusal rate</div><div class="d">The one quality signal computable with no labels at all.</div></div>
+      <div class="li"><div class="t">Uncited answers</div><div class="d">The shape a hallucination takes here.</div></div>
+      <div class="li"><div class="t">Cost per answer</div><div class="d">Real provider tokens, attributed to org and document.</div></div>
+      <div class="li"><div class="t">Retrieval traces</div><div class="d">The query that actually ran, with scores.</div></div>
+    </div>
+    <div>
+      <div class="lh n">Refused</div>
+      <div class="li"><div class="t">Recall &amp; precision</div><div class="d">Need a labelled golden set. There isn't one, so the columns don't exist &mdash; and two tests assert they never appear.</div></div>
+      <div class="li"><div class="t">Groundedness</div><div class="d">Same reason.</div></div>
+      <div class="li"><div class="t">&ldquo;We benchmarked the reranker&rdquo;</div><div class="d">I evaluated one and declined &mdash; but on <b>a handful of manual queries, not a golden set.</b> Directionally right, not rigorous. Recorded that way.</div></div>
+    </div>
+  </div>
+  <div class="hair"></div>
+  <div class="base"><div class="who">CampusBrain <span>&middot; no fabricated metrics</span></div><div class="num">07 / 10</div></div>
+</section>
+
+<!-- ============================== 08 ============================== -->
+<section class="pg">
+  <div class="kick g">Status, stated plainly</div>
+  <h2>I won't call it production&#8209;ready.</h2>
+  <div class="lede">It is <b>production&#8209;oriented</b>: built with production engineering principles, on free&#8209;tier infrastructure, with the unfinished parts named rather than smoothed over.</div>
+  <div class="sgrid">
+    <div class="srow"><div class="chip b">Built</div><div class="txt">Durable ingestion, tenant isolation, RBAC, audit trail, cost tracking, correlation IDs, hybrid retrieval, grounded citations</div></div>
+    <div class="srow"><div class="chip p">Partial</div><div class="txt"><b>Worker shares the API process</b> &mdash; the free tier has no worker service, so ingestion load and request latency are coupled. Migration trigger is written down.</div></div>
+    <div class="srow"><div class="chip p">Partial</div><div class="txt"><b>Rate limits are in&#8209;process.</b> Correct at one worker; unenforceable at two.</div></div>
+    <div class="srow"><div class="chip g">Gap</div><div class="txt"><b>No labelled golden set.</b> Seven tuning decisions are formally blocked on it &mdash; including the similarity floor that decides between &ldquo;I don't know&rdquo; and a confident fabrication.</div></div>
+  </div>
+  <div class="stmt" style="font-size:36px;margin-top:auto;margin-bottom:14px">A gap you have <span class="hg">named</span> is not the same as one you <span class="hi">haven't noticed</span>.</div>
+  <div class="hair"></div>
+  <div class="base"><div class="who">CampusBrain <span>&middot; a named gap beats an unnoticed one</span></div><div class="num">08 / 10</div></div>
+</section>
+
+<!-- ============================== 09 ============================== -->
+<section class="pg">
+  <div class="kick">Lessons</div>
+  <h2>What the demo never teaches</h2>
+  <div class="stack" style="margin-top:44px">
+    <div class="st"><div class="n">01</div><div><div class="h">Building the AI feature was the easy part</div><div class="p">Reliability, cost accountability and honest uncertainty took far longer &mdash; and none of them appear in a demo video.</div></div></div>
+    <div class="st"><div class="n">02</div><div><div class="h">A good decision names what it rejected</div><div class="p">A list of technologies tells you nothing. A trade-off tells you how someone thinks.</div></div></div>
+    <div class="st"><div class="n">03</div><div><div class="h">The best thing I shipped was something I deleted</div><div class="p">Removing the confidence badge made the product less impressive and more trustworthy.</div></div></div>
+    <div class="st"><div class="n">04</div><div><div class="h">A system that admits what it doesn't know is more useful than one that sounds certain</div><div class="p">That is an engineering property, not a UX preference.</div></div></div>
+  </div>
+  <div class="hair"></div>
+  <div class="base"><div class="who">CampusBrain <span>&middot; four lessons</span></div><div class="num">09 / 10</div></div>
+</section>
+
+<!-- ============================== 10 ============================== -->
+<section class="pg close">
+  <div class="kick">Close</div>
+  <h2>Tell me where this breaks down.</h2>
+  <div class="lede">Every trade-off in this system is written down, including the ones I reversed. I'd rather have the critique than the compliment.</div>
+  <div class="ask">
+    <div class="q">The two decisions I'm least sure about:</div>
+    <div class="a"><b style="color:#fff">1.</b> Postgres over Redis for the durable queue &mdash; what failure mode do you think I'm underweighting?<br><br><b style="color:#fff">2.</b> The similarity floor that triggers a refusal. It's currently a number with no validation behind it, and it decides whether a student gets an answer or a shrug.</div>
+  </div>
+  <div class="hair"></div>
+  <div class="base"><div class="who">CampusBrain <span>&middot; production&#8209;oriented, and precise about it</span></div><div class="num">10 / 10</div></div>
+</section>
+
+</div>
+</body>
+</html>
