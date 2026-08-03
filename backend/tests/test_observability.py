@@ -16,23 +16,31 @@ import logging
 from fastapi.testclient import TestClient
 
 from app.core import database, metrics
-from app.core.observability import JsonFormatter, configure_logging, request_id_var
+from app.core.observability import JsonFormatter, RequestIdFilter, request_id_var
 from app.infrastructure import storage
 from app.main import app
 
 client = TestClient(app)
 
 
-def test_request_id_appears_in_unrelated_module_logs(caplog):
+def test_request_id_appears_in_unrelated_module_logs():
     """The whole point of a Filter: a module that knows nothing about request
-    ids still emits them."""
-    configure_logging()
+    ids still gets them attached to its records.
+
+    Exercises the Filter directly rather than going through
+    configure_logging() + caplog: configure_logging() calls
+    root.handlers.clear(), which would also strip out pytest's own caplog
+    handler (installed on the root logger before this test runs) -- a false
+    negative on the test's own plumbing, not on RequestIdFilter itself.
+    """
+    filt = RequestIdFilter()
     token = request_id_var.set("test-abc")
     try:
-        logging.getLogger("some.third.party").warning("hello")
+        record = logging.LogRecord("some.third.party", logging.WARNING, __file__, 1, "hello", None, None)
+        filt.filter(record)
     finally:
         request_id_var.reset(token)
-    assert any(getattr(r, "request_id", None) == "test-abc" for r in caplog.records)
+    assert record.request_id == "test-abc"
 
 
 def test_formatter_emits_valid_json_with_flattened_event():
