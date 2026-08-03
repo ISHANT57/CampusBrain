@@ -30,13 +30,25 @@ class _StubDocRepo:
         return _StubDoc(f"doc-{document_id}.pdf")
 
 
+GROUNDING = {
+    "best_semantic_score": 0.82,
+    "relevance_threshold": 0.35,
+    "retrieved_chunks": 3,
+    "cited_chunks": 1,
+    "cited_documents": 1,
+    "refused": False,
+}
+
+
 def _fake_stream_answer(_db, _org_id, _question, top_k=5, history=None):
+    yield {"type": "retrieved", "documents": [{"document_id": 7, "pages": [2, 5], "chunks": 2}]}
     yield {"type": "delta", "text": "Hello "}
     yield {"type": "delta", "text": "world."}
     yield {
         "type": "done",
         "answer": "Hello world. [1]",
         "citations": [{"index": 1, "document_id": 7, "page_number": 2, "chunk_id": 99, "excerpt": "hi"}],
+        "grounding": GROUNDING,
     }
 
 
@@ -52,12 +64,22 @@ def test_deltas_pass_through_unchanged_and_done_gets_hydrated_citations(monkeypa
     lines = list(chat_module._stream_events(db=None, org_id=1, payload=ChatRequest(question="hi")))
     events = [_parse(line) for line in lines]
 
-    assert events[0] == {"type": "delta", "text": "Hello "}
-    assert events[1] == {"type": "delta", "text": "world."}
-    assert events[2]["type"] == "done"
-    assert events[2]["citations"] == [
+    # The retrieved event is hydrated with filenames too -- rag_service deals in
+    # document ids and this layer is the only place a display string is resolved,
+    # so an un-hydrated retrieved event would surface a bare id to the user.
+    assert events[0] == {
+        "type": "retrieved",
+        "documents": [{"document_id": 7, "filename": "doc-7.pdf", "pages": [2, 5], "chunks": 2}],
+    }
+    assert events[1] == {"type": "delta", "text": "Hello "}
+    assert events[2] == {"type": "delta", "text": "world."}
+    assert events[3]["type"] == "done"
+    assert events[3]["citations"] == [
         {"index": 1, "document_id": 7, "filename": "doc-7.pdf", "page_number": 2, "excerpt": "hi"},
     ]
+    # Passed through untouched: grounding needs no hydration, and this layer must
+    # not reshape it (the blocking endpoint returns the identical object).
+    assert events[3]["grounding"] == GROUNDING
 
 
 def test_unknown_document_id_hydrates_to_unknown_filename(monkeypatch):
@@ -93,4 +115,5 @@ def test_slash_stream_routes_to_the_sse_handler_not_the_org_slug_catch_all(monke
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/event-stream")
     events = [_parse(line + "\n\n") for line in response.text.strip("\n").split("\n\n") if line]
-    assert events[0] == {"type": "delta", "text": "Hello "}
+    assert events[0]["type"] == "retrieved"
+    assert events[1] == {"type": "delta", "text": "Hello "}

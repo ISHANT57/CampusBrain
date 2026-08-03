@@ -1,134 +1,14 @@
-import { memo, useState } from 'react'
+import { memo, useCallback, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Check, Copy, RotateCcw } from 'lucide-react'
 import { Button } from './ui/button'
 import { AnswerSkeleton, Avatar, ErrorCard, Tooltip } from './ui/primitives'
 import { SourceRail } from './SourceCard'
-import { cn } from './lib/utils'
-import type { ChatMessage, Citation } from './types'
+import { AnswerBody } from './AnswerBody'
+import { GroundingBar } from './GroundingBar'
+import type { ChatMessage, MessagePhase } from './types'
 
 const ease = [0.16, 1, 0.3, 1] as const
-
-/* Inline markdown-lite: **bold**, *italic*, `code`, and [n] citation markers
-   — the constructs the backend prompt actually produces. A full markdown
-   parser would be overkill for that. */
-const INLINE = /(\*\*[^*]+\*\*|\*[^*\s][^*]*\*|`[^`]+`|\[\d+\])/g
-
-function Inline({ text, citations }: { text: string; citations?: Citation[] }) {
-  return (
-    <>
-      {text.split(INLINE).map((part, i) => {
-        if (!part) return null
-        if (part.startsWith('**')) return <strong key={i}>{part.slice(2, -2)}</strong>
-        if (part.startsWith('`')) return <code key={i}>{part.slice(1, -1)}</code>
-        if (part.startsWith('*')) return <em key={i}>{part.slice(1, -1)}</em>
-        const m = part.match(/^\[(\d+)\]$/)
-        if (m) {
-          const n = Number(m[1])
-          const src = citations?.find((c) => c.index === n)
-          if (!src) return null
-          return <CitationChip key={i} src={src} />
-        }
-        return <span key={i}>{part}</span>
-      })}
-    </>
-  )
-}
-
-function CitationChip({ src }: { src: Citation }) {
-  return (
-    <Tooltip
-      side="top"
-      label={
-        <span className="block max-w-[240px] truncate text-left">
-          {src.filename} · p.{src.page_number}
-        </span>
-      }
-      className="align-baseline"
-    >
-      <a
-        href={`#source-${src.index}`}
-        aria-label={`Source ${src.index}: ${src.filename}, page ${src.page_number}`}
-        /* Left margin only. A right margin left a visible gap before the
-           punctuation that almost always follows a citation ("… student 1 ."). */
-        className="ml-0.5 inline-flex h-[18px] min-w-[18px] -translate-y-px items-center justify-center rounded-[6px] border border-border bg-sunken px-[5px] align-middle font-mono text-[10px] font-medium text-muted no-underline transition-colors duration-150 hover:border-accent-border hover:bg-accent-soft hover:text-accent"
-      >
-        {src.index}
-      </a>
-    </Tooltip>
-  )
-}
-
-const BULLET = /^\s*[-*]\s+/
-const NUMBERED = /^\s*\d+[.)]\s+/
-const MARKER = /^\s*(?:[-*]|\d+[.)])\s+/
-
-type Run = { kind: 'p' | 'ul' | 'ol'; lines: string[] }
-
-/* Splits one block into consecutive runs of the same kind, so a paragraph and
-   the list that follows it inside the same block each render correctly. */
-function groupLines(block: string): Run[] {
-  const runs: Run[] = []
-  for (const line of block.split('\n')) {
-    if (!line.trim()) continue
-    const kind: Run['kind'] = BULLET.test(line) ? 'ul' : NUMBERED.test(line) ? 'ol' : 'p'
-    const last = runs[runs.length - 1]
-    if (last && last.kind === kind) last.lines.push(line)
-    else runs.push({ kind, lines: [line] })
-  }
-  return runs
-}
-
-function Blocks({ text, citations }: { text: string; citations?: Citation[] }) {
-  // Split on fenced code first so a ``` block's blank lines don't get chopped
-  // into separate paragraphs by the double-newline split below.
-  const segments = text.split(/(```[\s\S]*?```)/g)
-
-  return (
-    <>
-      {segments.map((segment, si) => {
-        if (!segment) return null
-
-        if (segment.startsWith('```')) {
-          const body = segment.replace(/^```[^\n]*\n?/, '').replace(/```$/, '')
-          return (
-            <pre key={si}>
-              <code>{body.replace(/\n$/, '')}</code>
-            </pre>
-          )
-        }
-
-        return segment.split('\n\n').map((block, bi) =>
-          // Group consecutive lines by kind rather than typing the whole block
-          // from its first line: models routinely emit a lead-in sentence
-          // followed by bullets in one block ("What it covers:\n- …"), which
-          // first-line detection rendered as one run-on paragraph with the
-          // dashes left inline.
-          groupLines(block).map((run, ri) => {
-            const key = `${si}-${bi}-${ri}`
-            if (run.kind === 'p') {
-              return (
-                <p key={key}>
-                  <Inline text={run.lines.join(' ')} citations={citations} />
-                </p>
-              )
-            }
-            const List = run.kind === 'ul' ? 'ul' : 'ol'
-            return (
-              <List key={key}>
-                {run.lines.map((l, li) => (
-                  <li key={li}>
-                    <Inline text={l.replace(MARKER, '')} citations={citations} />
-                  </li>
-                ))}
-              </List>
-            )
-          }),
-        )
-      })}
-    </>
-  )
-}
 
 function Actions({ text, onRetry }: { text: string; onRetry: () => void }) {
   const [copied, setCopied] = useState(false)
@@ -166,10 +46,51 @@ function Actions({ text, onRetry }: { text: string; onRetry: () => void }) {
   )
 }
 
+/* Screen-reader status, and the reason it is a separate node from the answer.
+
+   aria-live used to sit on the answer container itself. That container's text
+   grows with every streamed token, so assistive tech was asked to re-announce
+   a continuously changing region hundreds of times per answer — which in
+   practice means the whole answer read from the top, repeatedly. A live
+   region has to carry something SHORT that changes at MEANINGFUL moments, so
+   it carries the phase and nothing else. The prose is left un-live and is
+   read normally, on demand, once it has settled. */
+const STATUS: Partial<Record<MessagePhase, string>> = {
+  searching: 'Searching documents',
+  revealing: 'Generating answer',
+  done: 'Answer complete',
+  stopped: 'Generation stopped',
+}
+
+function StreamStatus({ phase }: { phase?: MessagePhase }) {
+  const label = phase ? STATUS[phase] : undefined
+  return (
+    <>
+      <p role="status" aria-live="polite" className="sr-only">
+        {label}
+      </p>
+      {phase === 'revealing' && (
+        <p className="mb-2 flex items-center gap-2 text-[12.5px] text-faint" aria-hidden="true">
+          <span className="size-1.5 animate-shimmer rounded-full bg-accent" />
+          Generating answer
+        </p>
+      )}
+    </>
+  )
+}
+
 /* One row shape for both roles — avatar gutter, name, then content. Keeping
    the gutter identical is what makes a thread read as one continuous
    conversation instead of alternating left/right islands. */
-function Turn({ kind, name, children }: { kind: 'user' | 'assistant'; name: string; children: React.ReactNode }) {
+function Turn({
+  kind,
+  name,
+  children,
+}: {
+  kind: 'user' | 'assistant'
+  name: string
+  children: React.ReactNode
+}) {
   return (
     <motion.div
       initial={{ opacity: 0, y: 8 }}
@@ -196,7 +117,16 @@ export const Message = memo(function Message({
   brand: string
   onRetry: () => void
 }) {
-  const { role, content, phase, citations = [] } = message
+  const { role, content, phase, citations = [], retrieved = [], grounding } = message
+
+  /* seq, not a bare number: clicking the SAME marker twice has to re-scroll
+     and re-highlight. With plain state the second click is a no-op because
+     the value didn't change, so the effect in SourceRail never reruns and the
+     card appears unresponsive. A counter makes every click a distinct value. */
+  const [activeCite, setActiveCite] = useState<{ n: number; seq: number } | null>(null)
+  const onCite = useCallback((n: number) => {
+    setActiveCite((prev) => ({ n, seq: (prev?.seq ?? 0) + 1 }))
+  }, [])
 
   if (role === 'user') {
     return (
@@ -231,17 +161,34 @@ export const Message = memo(function Message({
   // source list is still empty. Keep the rail's skeleton up across that gap
   // instead of it disappearing after "searching" and popping back in at the
   // end, which reads as broken rather than as "still resolving".
+  //
+  // Since P2-2 the gap is usually filled by the "retrieved" event instead of a
+  // skeleton, so this only covers the window before retrieval returns — or a
+  // backend too old to send that event, which still degrades to the old
+  // skeleton-until-done behaviour rather than showing an empty rail.
   const sourcesLoading = searching || (phase === 'revealing' && citations.length === 0)
 
   return (
     <Turn kind="assistant" name={brand}>
-      <SourceRail citations={citations} loading={sourcesLoading} />
+      <StreamStatus phase={phase} />
+
+      <SourceRail
+        citations={citations}
+        retrieved={retrieved}
+        loading={sourcesLoading}
+        activeCite={activeCite}
+      />
 
       {searching ? (
         <AnswerSkeleton />
       ) : (
-        <div className="prose-answer" aria-live="polite" aria-busy={phase === 'revealing'}>
-          <Blocks text={content} citations={citations} />
+        <div className="prose-answer">
+          <AnswerBody
+            text={content}
+            citations={citations}
+            activeCite={activeCite?.n ?? null}
+            onCite={onCite}
+          />
           {phase === 'revealing' && (
             <span
               className="ml-0.5 inline-block h-[1.05em] w-[2px] translate-y-[2px] animate-caret bg-accent align-baseline"
@@ -251,9 +198,13 @@ export const Message = memo(function Message({
         </div>
       )}
 
-      {phase === 'stopped' && (
-        <p className="mt-3 text-[12.5px] text-faint">Stopped generating.</p>
-      )}
+      {phase === 'stopped' && <p className="mt-3 text-[12.5px] text-faint">Stopped generating.</p>}
+
+      {/* Only on a completed answer, and only when the backend actually sent
+          grounding. A stopped or interrupted answer has no settled basis to
+          report, and an older backend sends none — in both cases the honest
+          thing is to show nothing rather than a placeholder. */}
+      {phase === 'done' && grounding && <GroundingBar grounding={grounding} />}
 
       {phase === 'done' && <Actions text={content} onRetry={onRetry} />}
     </Turn>
