@@ -1,0 +1,586 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CampusBrain &mdash; Production Engineering Case Study</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  /* Every non-ASCII glyph in this file is an HTML entity, never a literal
+     character. The previous deck was authored with literal arrows and middots
+     and rendered as mojibake the moment the file was opened with a different
+     assumed encoding -- entities are immune to that. */
+  :root{
+    --ink:#111827; --muted:#6B7280; --faint:#9CA3AF; --line:#E5E7EB;
+    --blue:#2563EB; --blue-soft:#EFF4FF; --blue-line:#BFDBFE;
+    --teal:#0F766E; --teal-mid:#14B8A6; --teal-soft:#E6F8F6; --teal-line:#B7E8E1;
+    --red:#B91C1C; --red-soft:#FDF2F2; --red-line:#F4C7C7;
+    --amber:#B45309; --amber-soft:#FFFBEB; --amber-line:#FDE68A;
+    --bg:#FFFFFF;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{background:#0F172A;font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;color:var(--ink);-webkit-font-smoothing:antialiased}
+  .mono{font-family:'JetBrains Mono',ui-monospace,SFMono-Regular,Menlo,monospace}
+  .deck{display:flex;flex-direction:column;align-items:center;gap:44px;padding:52px 0 80px}
+  .deck-head{color:#E2E8F0;text-align:center;max-width:760px}
+  .deck-head h1{font-size:24px;font-weight:700;letter-spacing:-.02em}
+  .deck-head p{color:#94A3B8;font-size:13.5px;margin-top:9px;line-height:1.6}
+
+  /* ---------- slide shell : 1200 x 675 (16:9) ---------- */
+  .slide{width:1200px;height:675px;background:var(--bg);position:relative;overflow:hidden;
+    box-shadow:0 30px 80px -20px rgba(2,6,23,.55);padding:52px 68px 56px;display:flex;flex-direction:column}
+  .eyebrow{position:absolute;top:28px;left:68px;font-size:11px;font-weight:700;letter-spacing:.15em;color:var(--blue);text-transform:uppercase}
+  .pageno{position:absolute;top:28px;right:68px;font-size:11px;font-weight:600;letter-spacing:.08em;color:var(--faint)}
+  h2.head{font-size:42px;line-height:1.09;font-weight:800;letter-spacing:-.028em;margin-top:22px}
+  .sub{font-size:17.5px;color:var(--muted);font-weight:500;margin-top:11px;letter-spacing:-.01em}
+  .rule{position:absolute;left:68px;right:68px;bottom:36px;height:1px;background:var(--line)}
+  .foot{position:absolute;left:68px;right:68px;bottom:15px;display:flex;justify-content:space-between;
+    font-size:10.5px;letter-spacing:.05em;color:var(--faint);font-weight:600}
+  .foot .brand{color:var(--teal-mid)}
+  .body{flex:1;min-height:0;display:flex;flex-direction:column}
+
+  .ic{width:19px;height:19px;fill:none;stroke:currentColor;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round;flex:none}
+
+  /* ---------- 01 cover ---------- */
+  .cover h2.head{font-size:56px;letter-spacing:-.032em;line-height:1.05;margin-top:16px}
+  .cover .lede{font-size:21px;font-weight:600;letter-spacing:-.015em;margin-top:16px;color:#374151}
+  .cover .lede b{color:var(--blue);font-weight:700}
+  .cover .strip{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:auto;margin-bottom:6px}
+  .cover .cell{border:1px solid var(--line);border-radius:11px;padding:14px 16px}
+  .cover .cell .k{font-size:10px;font-weight:700;letter-spacing:.12em;color:var(--faint);text-transform:uppercase}
+  .cover .cell .v{font-size:14px;font-weight:700;letter-spacing:-.015em;margin-top:6px;line-height:1.3}
+  .cover .cell .n{font-size:11.5px;color:var(--muted);margin-top:4px;line-height:1.4}
+
+  /* ---------- generic node ---------- */
+  .node{border:1px solid var(--line);border-radius:9px;font-size:12.5px;font-weight:600;
+    display:flex;align-items:center;justify-content:center;text-align:center;color:var(--ink);padding:0 8px}
+  .node.b{border-color:var(--blue-line);background:var(--blue-soft);color:var(--blue)}
+  .node.t{border-color:var(--teal-line);background:var(--teal-soft);color:var(--teal)}
+  .node.g{border-style:dashed;color:var(--faint);font-weight:500}
+
+  /* ---------- 04 grounding ---------- */
+  .split{flex:1;display:grid;grid-template-columns:1fr 1fr;gap:26px;margin-top:22px;min-height:0}
+  .panel{border:1px solid var(--line);border-radius:13px;padding:22px;display:flex;flex-direction:column}
+  .panel.bad{background:var(--red-soft);border-color:var(--red-line)}
+  .panel.good{background:var(--teal-soft);border-color:var(--teal-line)}
+  .panel .tag{font-size:10px;font-weight:700;letter-spacing:.13em;text-transform:uppercase;display:flex;align-items:center;gap:7px}
+  .panel.bad .tag{color:var(--red)} .panel.good .tag{color:var(--teal)}
+  .panel .big{font-size:20px;font-weight:700;letter-spacing:-.02em;margin-top:12px;line-height:1.3}
+  .panel .why{font-size:13px;line-height:1.55;color:#374151;margin-top:10px}
+  .badge-demo{margin-top:16px;display:inline-flex;align-items:center;gap:8px;background:#fff;border:1px solid var(--red-line);
+    border-radius:999px;padding:7px 15px;font-size:13px;font-weight:700;color:var(--red);width:fit-content}
+  .fact{margin-top:14px;background:#fff;border:1px solid var(--teal-line);border-radius:9px;padding:13px 15px}
+  .fact .row{display:flex;justify-content:space-between;font-size:12.5px;padding:5px 0}
+  .fact .row + .row{border-top:1px solid #EAF6F4}
+  .fact .row span:first-child{color:var(--muted)}
+  .fact .row span:last-child{font-weight:600;color:var(--ink)}
+
+  /* ---------- 05 trade-offs ---------- */
+  .trows{flex:1;display:flex;flex-direction:column;gap:8px;margin-top:16px}
+  .trow{display:grid;grid-template-columns:30px 1.1fr 1.25fr 1fr 1.2fr;gap:15px;align-items:start;
+    border:1px solid var(--line);border-radius:10px;padding:11px 15px}
+  .trow .no{font-size:15px;font-weight:800;color:var(--teal-mid);padding-top:1px}
+  .trow .lab{font-size:9.5px;font-weight:700;letter-spacing:.1em;color:var(--faint);text-transform:uppercase;margin-bottom:4px}
+  .trow p{font-size:12px;line-height:1.42;color:#374151}
+  .trow p b{color:var(--ink)}
+
+  /* ---------- 06 failure ---------- */
+  .fails{flex:1;display:flex;flex-direction:column;gap:8px}
+  .frow{display:grid;grid-template-columns:1fr 1.15fr;gap:11px}
+  .fcell{border-radius:9px;padding:10px 14px;font-size:12.5px;line-height:1.4}
+  .fcell.f{background:var(--red-soft);color:#7F1D1D;border:1px solid var(--red-line)}
+  .fcell.r{background:var(--teal-soft);color:var(--teal);border:1px solid var(--teal-line)}
+  .fcell .fl{font-size:9.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;margin-bottom:3px;opacity:.7}
+
+  /* ---------- 07 incident ---------- */
+  .timeline{flex:1;display:flex;flex-direction:column;gap:0;margin-top:18px}
+  .tl{display:grid;grid-template-columns:118px 1fr;gap:20px;padding:13px 0;border-bottom:1px solid var(--line)}
+  .tl:last-child{border-bottom:0}
+  .tl .when{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--faint);padding-top:2px}
+  .tl .what{font-size:14.5px;line-height:1.5;color:#374151}
+  .tl .what b{color:var(--ink);font-weight:700}
+  .tl.hit .when{color:var(--red)} .tl.fix .when{color:var(--teal)}
+  .codeline{background:#0F172A;border-radius:8px;padding:10px 14px;margin-top:8px;
+    font-size:12px;color:#93C5FD;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+
+  /* ---------- 08 measured / not measured ---------- */
+  .cols{flex:1;display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:20px;min-height:0}
+  .col{display:flex;flex-direction:column}
+  .col .ch{font-size:11px;font-weight:700;letter-spacing:.13em;text-transform:uppercase;display:flex;align-items:center;gap:8px;margin-bottom:13px}
+  .col.yes .ch{color:var(--blue)} .col.no .ch{color:var(--amber)}
+  .item{border:1px solid var(--line);border-radius:9px;padding:11px 14px;margin-bottom:8px}
+  .col.no .item{background:var(--amber-soft);border-color:var(--amber-line)}
+  .item .t{font-size:13px;font-weight:700;letter-spacing:-.01em}
+  .item .d{font-size:11.5px;color:var(--muted);line-height:1.42;margin-top:3px}
+
+  /* ---------- 09 lessons ---------- */
+  .lessons{flex:1;display:flex;flex-direction:column;justify-content:center;margin-top:8px}
+  .lesson{padding:14px 0;border-bottom:1px solid var(--line);font-size:24px;font-weight:700;letter-spacing:-.022em;line-height:1.28}
+  .lesson:last-child{border-bottom:0}
+  .lesson .hi{color:var(--blue)} .lesson .ht{color:var(--teal)}
+
+  /* ---------- 10 close ---------- */
+  .three{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-top:26px}
+  .card{border:1px solid var(--line);border-radius:12px;padding:19px;border-top:3px solid var(--blue)}
+  .card:nth-child(2){border-top-color:var(--teal-mid)} .card:nth-child(3){border-top-color:var(--ink)}
+  .card .k{font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;margin:9px 0 7px;color:var(--blue)}
+  .card:nth-child(2) .k{color:var(--teal)} .card:nth-child(3) .k{color:var(--ink)}
+  .card p{font-size:13px;line-height:1.55;color:#374151}
+  .cta{margin-top:auto;margin-bottom:4px;background:#0F172A;border-radius:14px;padding:20px 26px}
+  .cta .q{color:#fff;font-size:19.5px;font-weight:700;letter-spacing:-.02em;line-height:1.35}
+  .cta .s{color:#94A3B8;font-size:13px;margin-top:7px}
+
+  @media print{
+    @page{size:1200px 675px;margin:0}
+    html,body{background:#fff}
+    .deck{padding:0;gap:0;background:#fff}
+    .deck-head{display:none}
+    .slide{box-shadow:none;page-break-after:always;page-break-inside:avoid}
+    .slide:last-child{page-break-after:auto}
+  }
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+  <symbol id="i-x" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></symbol>
+  <symbol id="i-db" viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></symbol>
+  <symbol id="i-eye" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></symbol>
+  <symbol id="i-flag" viewBox="0 0 24 24"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></symbol>
+  <symbol id="i-book" viewBox="0 0 24 24"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></symbol>
+  <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></symbol>
+</defs></svg>
+
+<div class="deck">
+
+<div class="deck-head">
+  <h1>CampusBrain &mdash; LinkedIn Carousel</h1>
+  <p>10 slides &middot; 1200 &times; 675 (16:9) &middot; Open in a browser, then <b>Print &rarr; Save as PDF</b> (each slide becomes one page). Upload the PDF directly to LinkedIn as a document post.</p>
+</div>
+
+<!-- ================= 01 COVER ================= -->
+<section class="slide cover">
+  <div class="eyebrow">Case study &middot; System design</div>
+  <div class="pageno">01 / 10</div>
+  <h2 class="head">Building a RAG demo<br>takes an afternoon.</h2>
+  <div class="lede">Building one that stays correct when a deploy fails halfway through is<br><b>a different engineering problem.</b></div>
+  <div class="strip">
+    <div class="cell">
+      <div class="k">The system</div>
+      <div class="v">Multi-tenant AI knowledge platform</div>
+      <div class="n">Cited answers over an institution's own documents</div>
+    </div>
+    <div class="cell">
+      <div class="k">The focus</div>
+      <div class="v">Reliability &amp; evidence</div>
+      <div class="n">Durability, isolation, observability, cost</div>
+    </div>
+    <div class="cell">
+      <div class="k">The constraint</div>
+      <div class="v">Free-tier infrastructure</div>
+      <div class="n">512&nbsp;MB, one worker, no managed queue</div>
+    </div>
+    <div class="cell">
+      <div class="k">The claim</div>
+      <div class="v">Production&#8209;oriented</div>
+      <div class="n">Not production&#8209;ready &mdash; and I'll explain why</div>
+    </div>
+  </div>
+  <div class="rule"></div>
+  <div class="foot"><span>An engineering case study, not a product launch</span><span class="brand">CampusBrain</span></div>
+</section>
+
+<!-- ================= 02 THE PROBLEM ================= -->
+<section class="slide">
+  <div class="eyebrow">The problem</div>
+  <div class="pageno">02 / 10</div>
+  <h2 class="head">Where most RAG projects stop</h2>
+  <div class="sub">The demo working is the beginning of the engineering, not the end of it.</div>
+  <div class="body">
+    <div style="display:grid;grid-template-columns:330px 1fr;gap:34px;margin-top:26px;flex:1">
+      <div>
+        <div style="font-size:11px;font-weight:700;letter-spacing:.15em;color:var(--faint);text-transform:uppercase;margin-bottom:13px">Typical tutorial</div>
+        <div style="display:flex;flex-direction:column;gap:9px">
+          <div class="node g" style="height:46px">Upload</div>
+          <div class="node g" style="height:46px">Chunk</div>
+          <div class="node g" style="height:46px">Embed</div>
+          <div class="node g" style="height:46px">Answer</div>
+        </div>
+        <p style="font-size:12px;color:var(--muted);line-height:1.5;margin-top:16px">
+          Every box works on the happy path. None of them says what happens when the process dies between two of them.
+        </p>
+      </div>
+      <div>
+        <div style="font-size:11px;font-weight:700;letter-spacing:.15em;color:var(--teal);text-transform:uppercase;margin-bottom:13px">
+          The same feature, built to survive
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:9px">
+          <div class="node" style="height:42px">Upload</div>
+          <div class="node b" style="height:42px">Validate bytes</div>
+          <div class="node" style="height:42px">Object storage</div>
+          <div class="node t" style="height:42px">Durable queue</div>
+          <div class="node t" style="height:42px">Claim &middot; lease</div>
+          <div class="node" style="height:42px">Extract &middot; OCR</div>
+          <div class="node" style="height:42px">Chunk &middot; embed</div>
+          <div class="node t" style="height:42px">Upsert&#8209;then&#8209;prune</div>
+          <div class="node b" style="height:42px">Tenant scoping</div>
+          <div class="node b" style="height:42px">Audit record</div>
+          <div class="node" style="height:42px">Cost ledger</div>
+          <div class="node t" style="height:42px">Retry &middot; reap</div>
+        </div>
+        <div style="display:flex;gap:20px;margin-top:15px;font-size:11.5px;color:var(--muted)">
+          <span style="display:flex;align-items:center;gap:7px"><span style="width:11px;height:11px;border-radius:3px;background:var(--blue);display:inline-block"></span> security &amp; isolation</span>
+          <span style="display:flex;align-items:center;gap:7px"><span style="width:11px;height:11px;border-radius:3px;background:var(--teal-mid);display:inline-block"></span> durability &amp; recovery</span>
+        </div>
+        <p style="font-size:12.5px;color:#374151;line-height:1.5;margin-top:15px">
+          The upload endpoint returns <b>202 Accepted</b> in well under a second and the work continues without it. That single change is what forces almost every box above to exist.
+        </p>
+      </div>
+    </div>
+  </div>
+  <div class="rule"></div>
+  <div class="foot"><span>Reliability &middot; isolation &middot; observability &middot; cost &middot; recovery</span><span class="brand">CampusBrain</span></div>
+</section>
+
+<!-- ================= 03 ARCHITECTURE ================= -->
+<section class="slide">
+  <div class="eyebrow">Architecture</div>
+  <div class="pageno">03 / 10</div>
+  <h2 class="head">One deployment graph</h2>
+  <div class="sub">Each store holds exactly one kind of responsibility.</div>
+  <div class="body">
+    <svg width="100%" height="326" viewBox="0 0 1064 326" preserveAspectRatio="xMidYMid meet" style="margin-top:16px">
+      <defs>
+        <marker id="ab" markerWidth="8" markerHeight="8" refX="4" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z" fill="#2563EB"/></marker>
+        <marker id="at" markerWidth="8" markerHeight="8" refX="4" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z" fill="#14B8A6"/></marker>
+      </defs>
+
+      <rect x="372" y="4" width="320" height="46" rx="10" fill="#0F172A"/>
+      <text x="532" y="32" font-size="13.5" font-weight="700" fill="#fff" text-anchor="middle" font-family="Inter">Frontend &#183; React + TypeScript &#183; Vercel</text>
+      <path d="M532 50 L532 82" stroke="#2563EB" stroke-width="2" marker-end="url(#ab)"/>
+
+      <rect x="376" y="82" width="312" height="66" rx="10" fill="#EFF4FF" stroke="#2563EB" stroke-width="1.6"/>
+      <text x="532" y="104" font-size="13.5" font-weight="700" fill="#2563EB" text-anchor="middle" font-family="Inter">FastAPI &#183; single uvicorn worker</text>
+      <text x="532" y="121" font-size="10.5" fill="#2563EB" text-anchor="middle" font-family="Inter">RBAC &#183; rate limiting &#183; request validation</text>
+      <text x="532" y="137" font-size="9.5" fill="#5B82E0" text-anchor="middle" font-family="Inter">api &#8594; services &#8594; repositories &#8594; infrastructure</text>
+
+      <path d="M436 148 C 300 168, 128 172, 128 190" stroke="#2563EB" stroke-width="2" fill="none" marker-end="url(#ab)"/>
+      <path d="M488 148 C 420 168, 348 172, 348 190" stroke="#2563EB" stroke-width="2" fill="none" marker-end="url(#ab)"/>
+      <path d="M576 148 C 640 168, 566 172, 566 190" stroke="#2563EB" stroke-width="2" fill="none" marker-end="url(#ab)"/>
+      <path d="M628 148 C 740 168, 784 172, 784 190" stroke="#2563EB" stroke-width="2" fill="none" marker-end="url(#ab)"/>
+
+      <rect x="40" y="196" width="176" height="58" rx="9" fill="#fff" stroke="#E5E7EB"/>
+      <text x="128" y="218" font-size="12.5" font-weight="700" fill="#111827" text-anchor="middle" font-family="Inter">PostgreSQL &#183; Neon</text>
+      <text x="128" y="234" font-size="10" fill="#6B7280" text-anchor="middle" font-family="Inter">source of truth</text>
+      <text x="128" y="247" font-size="10" fill="#0F766E" text-anchor="middle" font-family="Inter">+ the durable job queue</text>
+
+      <rect x="260" y="196" width="176" height="58" rx="9" fill="#fff" stroke="#E5E7EB"/>
+      <text x="348" y="218" font-size="12.5" font-weight="700" fill="#111827" text-anchor="middle" font-family="Inter">Supabase Storage</text>
+      <text x="348" y="234" font-size="10" fill="#6B7280" text-anchor="middle" font-family="Inter">S3&#8209;compatible blobs</text>
+      <text x="348" y="247" font-size="10" fill="#6B7280" text-anchor="middle" font-family="Inter">signed URLs, 15&#8209;min</text>
+
+      <rect x="478" y="196" width="176" height="58" rx="9" fill="#fff" stroke="#E5E7EB"/>
+      <text x="566" y="218" font-size="12.5" font-weight="700" fill="#111827" text-anchor="middle" font-family="Inter">Qdrant</text>
+      <text x="566" y="234" font-size="10" fill="#6B7280" text-anchor="middle" font-family="Inter">one collection per org</text>
+      <text x="566" y="247" font-size="10" fill="#6B7280" text-anchor="middle" font-family="Inter">semantic arm</text>
+
+      <rect x="696" y="196" width="176" height="58" rx="9" fill="#fff" stroke="#E5E7EB"/>
+      <text x="784" y="218" font-size="12.5" font-weight="700" fill="#111827" text-anchor="middle" font-family="Inter">Redis &#183; Upstash</text>
+      <text x="784" y="234" font-size="10" fill="#B91C1C" text-anchor="middle" font-family="Inter">cache only</text>
+      <text x="784" y="247" font-size="10" fill="#6B7280" text-anchor="middle" font-family="Inter">enforced by a build test</text>
+
+      <rect x="896" y="196" width="164" height="58" rx="9" fill="#E6F8F6" stroke="#14B8A6"/>
+      <text x="978" y="218" font-size="12.5" font-weight="700" fill="#0F766E" text-anchor="middle" font-family="Inter">Worker &#183; asyncio</text>
+      <text x="978" y="234" font-size="9.5" fill="#0F766E" text-anchor="middle" font-family="Inter">in&#8209;process, same box</text>
+      <text x="978" y="247" font-size="9.5" fill="#0F766E" text-anchor="middle" font-family="Inter">extract &#183; chunk &#183; embed</text>
+
+      <rect x="40" y="272" width="614" height="46" rx="9" fill="#FAFAFB" stroke="#E5E7EB"/>
+      <text x="56" y="290" font-size="10.5" font-weight="700" fill="#111827" font-family="Inter">OBSERVABILITY</text>
+      <text x="56" y="306" font-size="9.5" fill="#6B7280" font-family="Inter">structured JSON logs &#183; correlation ID per request &#183; /metrics &#183; liveness separated from readiness</text>
+      <line x1="330" y1="280" x2="330" y2="310" stroke="#E5E7EB"/>
+      <text x="346" y="290" font-size="10.5" font-weight="700" fill="#0F766E" font-family="Inter">TENANT ISOLATION</text>
+      <text x="346" y="306" font-size="9.5" fill="#6B7280" font-family="Inter">org_id from a verified JWT &#8594; org&#8209;scoped repository &#8594; per&#8209;org collection</text>
+
+      <rect x="674" y="272" width="386" height="46" rx="9" fill="#FFFBEB" stroke="#FDE68A"/>
+      <text x="690" y="290" font-size="10.5" font-weight="700" fill="#B45309" font-family="Inter">KNOWN LIMIT</text>
+      <text x="690" y="306" font-size="9.5" fill="#92400E" font-family="Inter">Rate limits are in&#8209;process. Correct at one worker; needs shared state at two.</text>
+    </svg>
+  </div>
+  <div class="rule"></div>
+  <div class="foot"><span>Retrieval: semantic + keyword, fused on rank &middot; refuses when nothing clears the floor</span><span class="brand">CampusBrain</span></div>
+</section>
+
+<!-- ================= 04 THE FLAGSHIP SLIDE ================= -->
+<section class="slide">
+  <div class="eyebrow">Engineering honesty</div>
+  <div class="pageno">04 / 10</div>
+  <h2 class="head">The decision I'd defend hardest<br>is one where I removed a feature</h2>
+  <div class="split">
+    <div class="panel bad">
+      <div class="tag"><svg class="ic" style="width:15px;height:15px"><use href="#i-x"/></svg> What I didn't ship</div>
+      <div class="big">A confidence badge</div>
+      <div class="badge-demo"><svg class="ic" style="width:14px;height:14px"><use href="#i-shield"/></svg> High Confidence</div>
+      <div class="why">
+        It demos beautifully. Every RAG tutorial ships one.
+        <br><br>
+        But a label means choosing cutoffs &mdash; above 0.7 is &ldquo;High&rdquo;, below 0.4 is &ldquo;Low&rdquo;. I had
+        <b>no labelled dataset</b> to validate a single one of those numbers against.
+        <br><br>
+        It would have been a number I invented, rendered so it looks measured. And once it is on
+        screen, people quote it back at you.
+      </div>
+    </div>
+    <div class="panel good">
+      <div class="tag"><svg class="ic" style="width:15px;height:15px"><use href="#i-check"/></svg> What I shipped instead</div>
+      <div class="big">The measurements, with their basis</div>
+      <div class="fact">
+        <div class="row"><span>Documents cited</span><span>3</span></div>
+        <div class="row"><span>Excerpts used</span><span>9 of 14 retrieved</span></div>
+        <div class="row"><span>Closest match</span><span class="mono">0.71</span></div>
+        <div class="row"><span>Refusal floor</span><span class="mono">0.35</span></div>
+      </div>
+      <div class="why">
+        The score is <b>never shown without the threshold it was compared against</b> &mdash; 0.71 means
+        nothing on its own. Cited and retrieved counts appear together, because an answer using
+        2 of 14 passages is a different claim from one using 9 of 14.
+        <br><br>
+        All of it was already being computed and written to a trace table. It was simply
+        <b>discarded from the response.</b>
+      </div>
+    </div>
+  </div>
+  <div class="rule"></div>
+  <div class="foot"><span>An invented metric is worse than a missing one &mdash; a missing metric gets questioned, an invented one gets quoted</span><span class="brand">CampusBrain</span></div>
+</section>
+
+<!-- ================= 05 TRADE-OFFS ================= -->
+<section class="slide">
+  <div class="eyebrow">Trade-offs</div>
+  <div class="pageno">05 / 10</div>
+  <h2 class="head">Every decision names what it gave up</h2>
+  <div class="sub">Five choices, each with the alternative I considered and rejected.</div>
+  <div class="trows">
+    <div class="trow">
+      <span class="no">01</span>
+      <div><div class="lab">Problem</div><p>A dropped ingestion job is silent data loss, not a slow request.</p></div>
+      <div><div class="lab">Chosen</div><p><b>Postgres job queue</b> &mdash; <span class="mono">FOR UPDATE SKIP LOCKED</span>, lease reaper, jittered backoff.</p></div>
+      <div><div class="lab">Rejected</div><p>Redis or a managed queue.</p></div>
+      <div><div class="lab">Trade-off</div><p>Slower than Redis, but no second stateful system to operate for durability I already had.</p></div>
+    </div>
+    <div class="trow">
+      <span class="no">02</span>
+      <div><div class="lab">Problem</div><p>Nothing stops a future contributor using the cache as a queue.</p></div>
+      <div><div class="lab">Chosen</div><p><b>Redis scoped to caching</b>, with a test that <b>fails the build</b> on any other use.</p></div>
+      <div><div class="lab">Rejected</div><p>A convention in a README.</p></div>
+      <div><div class="lab">Trade-off</div><p>A test that checks source, not behaviour &mdash; unusual, but conventions rot and tests don't.</p></div>
+    </div>
+    <div class="trow">
+      <span class="no">03</span>
+      <div><div class="lab">Problem</div><p>Cosine similarity and Postgres <span class="mono">ts_rank</span> are not comparable scales.</p></div>
+      <div><div class="lab">Chosen</div><p><b>Fuse on rank position</b> (RRF), keeping the semantic score separately.</p></div>
+      <div><div class="lab">Rejected</div><p>Summing or weighting raw scores.</p></div>
+      <div><div class="lab">Trade-off</div><p>Loses score magnitude &mdash; but the refusal threshold must read the semantic score, not the fused one.</p></div>
+    </div>
+    <div class="trow">
+      <span class="no">04</span>
+      <div><div class="lab">Problem</div><p>Long ingestion must leave the request path; the tier has no worker service.</p></div>
+      <div><div class="lab">Chosen</div><p><b>In-process asyncio worker</b> over the durable table.</p></div>
+      <div><div class="lab">Rejected</div><p>A separate worker deployment.</p></div>
+      <div><div class="lab">Trade-off</div><p>Shares a fate with the API. Named as a constraint, with a written migration trigger.</p></div>
+    </div>
+    <div class="trow">
+      <span class="no">05</span>
+      <div><div class="lab">Problem</div><p>An unaudited change and a missing cost row are not the same severity.</p></div>
+      <div><div class="lab">Chosen</div><p><b>Opposite contracts</b>: audit fails <b>closed</b> in the same transaction; cost fails <b>open</b>.</p></div>
+      <div><div class="lab">Rejected</div><p>One uniform logging policy.</p></div>
+      <div><div class="lab">Trade-off</div><p>Two behaviours to reason about, so a logging row can never break an answer.</p></div>
+    </div>
+  </div>
+  <div class="rule"></div>
+  <div class="foot"><span>Senior review asks what you gave up, not what you used</span><span class="brand">CampusBrain</span></div>
+</section>
+
+<!-- ================= 06 FAILURE ================= -->
+<section class="slide">
+  <div class="eyebrow">Failure handling</div>
+  <div class="pageno">06 / 10</div>
+  <h2 class="head">Designed for recovery, not for luck</h2>
+  <div class="sub">A system is judged by how it behaves when it breaks.</div>
+  <div class="body">
+  <div style="display:flex;gap:28px;margin-top:16px;flex:1">
+    <svg width="352" height="248" viewBox="0 0 352 248" preserveAspectRatio="xMidYMid meet" style="flex:none">
+      <defs>
+        <marker id="m1" markerWidth="8" markerHeight="8" refX="4" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z" fill="#2563EB"/></marker>
+        <marker id="m2" markerWidth="8" markerHeight="8" refX="4" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z" fill="#14B8A6"/></marker>
+        <marker id="m3" markerWidth="8" markerHeight="8" refX="4" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z" fill="#DC2626"/></marker>
+        <marker id="m4" markerWidth="8" markerHeight="8" refX="4" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z" fill="#9CA3AF"/></marker>
+      </defs>
+      <rect x="6" y="66" width="104" height="46" rx="9" fill="#fff" stroke="#E5E7EB"/>
+      <text x="58" y="94" font-size="12" font-weight="700" fill="#111827" text-anchor="middle" font-family="Inter">PENDING</text>
+      <path d="M110 89 L138 89" stroke="#2563EB" stroke-width="2" marker-end="url(#m1)"/>
+      <rect x="142" y="66" width="132" height="46" rx="9" fill="#EFF4FF" stroke="#2563EB"/>
+      <text x="208" y="87" font-size="12" font-weight="700" fill="#2563EB" text-anchor="middle" font-family="Inter">PROCESSING</text>
+      <text x="208" y="102" font-size="9.5" fill="#2563EB" text-anchor="middle" font-family="Inter">leased 15 min</text>
+      <path d="M274 89 L292 89" stroke="#14B8A6" stroke-width="2" marker-end="url(#m2)"/>
+      <rect x="296" y="66" width="50" height="46" rx="9" fill="#E6F8F6" stroke="#14B8A6"/>
+      <text x="321" y="94" font-size="10.5" font-weight="700" fill="#0F766E" text-anchor="middle" font-family="Inter">DONE</text>
+      <text x="124" y="130" font-size="9" fill="#6B7280" text-anchor="middle" font-family="Inter">claim: SKIP LOCKED</text>
+      <path d="M172 66 C 144 28, 84 28, 58 62" stroke="#9CA3AF" stroke-width="2" fill="none" stroke-dasharray="3 3" marker-end="url(#m4)"/>
+      <text x="116" y="20" font-size="9.5" fill="#6B7280" text-anchor="middle" font-family="Inter">lease expired &#8594; reaper resets</text>
+      <rect x="112" y="184" width="124" height="44" rx="9" fill="#FDF2F2" stroke="#F4C7C7"/>
+      <text x="174" y="204" font-size="12" font-weight="700" fill="#7F1D1D" text-anchor="middle" font-family="Inter">FAILED</text>
+      <text x="174" y="218" font-size="9" fill="#7F1D1D" text-anchor="middle" font-family="Inter">after max attempts</text>
+      <path d="M228 112 C 246 136, 246 158, 224 182" stroke="#DC2626" stroke-width="2" fill="none" stroke-dasharray="4 4" marker-end="url(#m3)"/>
+      <text x="252" y="152" font-size="9.5" fill="#7F1D1D" font-family="Inter">error</text>
+      <path d="M112 190 C 56 176, 34 142, 40 118" stroke="#9CA3AF" stroke-width="2" fill="none" stroke-dasharray="3 3" marker-end="url(#m4)"/>
+      <text x="6" y="164" font-size="9.5" fill="#6B7280" font-family="Inter">retry + backoff</text>
+    </svg>
+    <div class="fails">
+      <div class="frow">
+        <div class="fcell f"><div class="fl">Failure</div>Instance sleeps after 15 minutes idle</div>
+        <div class="fcell r"><div class="fl">Recovery</div>The queue is a table, so it survives. The worker re-claims on wake.</div>
+      </div>
+      <div class="frow">
+        <div class="fcell f"><div class="fl">Failure</div>Worker dies mid-ingestion</div>
+        <div class="fcell r"><div class="fl">Recovery</div>Row stays leased &#8594; reaper resets it after the lease expires &#8594; bounded retry</div>
+      </div>
+      <div class="frow">
+        <div class="fcell f"><div class="fl">Failure</div>Crash midway through re-indexing</div>
+        <div class="fcell r"><div class="fl">Recovery</div>New vectors are written <b>before</b> old ones are deleted, so a crash degrades rather than destroys</div>
+      </div>
+      <div class="frow">
+        <div class="fcell f"><div class="fl">Failure</div>Two workers claim the same job</div>
+        <div class="fcell r"><div class="fl">Recovery</div>Impossible by construction, and there is an integration test that proves it</div>
+      </div>
+      <div class="frow">
+        <div class="fcell f"><div class="fl">Failure</div>Client disconnects mid-answer</div>
+        <div class="fcell r"><div class="fl">Recovery</div>The partial answer is still recorded &mdash; an abandoned request must not vanish from the log</div>
+      </div>
+    </div>
+  </div>
+  </div>
+  <div class="rule"></div>
+  <div class="foot"><span>Attempts increment at claim time, so a crash loop is bounded rather than infinite</span><span class="brand">CampusBrain</span></div>
+</section>
+
+<!-- ================= 07 INCIDENT ================= -->
+<section class="slide">
+  <div class="eyebrow">Incident</div>
+  <div class="pageno">07 / 10</div>
+  <h2 class="head">Six hours of silence</h2>
+  <div class="sub">The outage had nothing to do with the AI. Neither did my first fix.</div>
+  <div class="timeline">
+    <div class="tl hit">
+      <div class="when">Symptom</div>
+      <div class="what">TLS handshake completed. Request fully sent. <b>Zero bytes returned.</b> Not a slow cold start &mdash; three separate attempts up to 90&nbsp;seconds returned nothing at all.</div>
+    </div>
+    <div class="tl">
+      <div class="when">Ruled out</div>
+      <div class="what">DNS resolved correctly. The same sandbox reached other hosts in under a second. So: the edge accepted the connection and the origin never answered.</div>
+    </div>
+    <div class="tl hit">
+      <div class="when">Root cause</div>
+      <div class="what">A migration created a Postgres enum type <b>explicitly</b>, then <span class="mono">create_table</span> created the same type <b>again</b>. It could never have succeeded on any database. The first deploy got far enough to leave the type behind, so every boot afterwards hit the identical wall &mdash; and the start script runs migrations before the server.
+        <div class="codeline">psycopg2.errors.DuplicateObject: type "ingestion_job_status" already exists</div>
+      </div>
+    </div>
+    <div class="tl hit">
+      <div class="when">My first fix</div>
+      <div class="what"><b>Also wrong.</b> I set <span class="mono">create_type=False</span> on a generic <span class="mono">sa.Enum</span> &mdash; a parameter that only exists on the dialect-specific type and is <b>silently ignored</b> there. Same error, one line further down.</div>
+    </div>
+    <div class="tl fix">
+      <div class="when">Real fix</div>
+      <div class="what">The correct type, plus <span class="mono">checkfirst</span> so it tolerates the orphaned type already in production. This time I <b>compiled the DDL and counted the statements</b> before claiming it worked: two <span class="mono">CREATE TYPE</span> before, one after.</div>
+    </div>
+    <div class="tl fix">
+      <div class="when">Lesson</div>
+      <div class="what">Verifying beats reasoning &mdash; <b>especially about your own fix.</b> The CI step that should have caught this existed. Nobody had checked it was passing.</div>
+    </div>
+  </div>
+  <div class="rule"></div>
+  <div class="foot"><span>The failure that taught me most was in a migration, not a model</span><span class="brand">CampusBrain</span></div>
+</section>
+
+<!-- ================= 08 MEASURED / NOT ================= -->
+<section class="slide">
+  <div class="eyebrow">Evaluation</div>
+  <div class="pageno">08 / 10</div>
+  <h2 class="head">What I measure &mdash; and what I refuse to</h2>
+  <div class="sub">The second column is the harder engineering decision.</div>
+  <div class="cols">
+    <div class="col yes">
+      <div class="ch"><svg class="ic" style="width:15px;height:15px"><use href="#i-eye"/></svg> Measured, and acted on</div>
+      <div class="item"><div class="t">Refusal rate</div><div class="d">The one quality signal computable with no labels at all. A rising rate means retrieval is degrading.</div></div>
+      <div class="item"><div class="t">Uncited-answer rate</div><div class="d">Answers that cite nothing are the shape a hallucination takes here.</div></div>
+      <div class="item"><div class="t">Token cost per answer</div><div class="d">Attributed to org, user and document. Real provider usage, not an estimate.</div></div>
+      <div class="item"><div class="t">Retrieval traces</div><div class="d">The query that actually ran, the chunks returned with their scores, and what was cited &mdash; stored per answer.</div></div>
+      <div class="item"><div class="t">Latency percentiles</div><div class="d">Retrieval, generation, and time-to-first-token measured separately.</div></div>
+    </div>
+    <div class="col no">
+      <div class="ch"><svg class="ic" style="width:15px;height:15px"><use href="#i-alert"/></svg> Deliberately not computed</div>
+      <div class="item"><div class="t">Recall &amp; precision</div><div class="d">Both need a labelled golden set. There isn't one, so the columns don't exist &mdash; and two tests assert they never appear.</div></div>
+      <div class="item"><div class="t">Groundedness / hallucination rate</div><div class="d">Same reason. A number nothing computed is worse than a blank, because a blank gets questioned.</div></div>
+      <div class="item"><div class="t">A confidence label</div><div class="d">Would require thresholds nothing validated. The API returns the score and the floor instead.</div></div>
+      <div class="item"><div class="t">&ldquo;We benchmarked the reranker&rdquo;</div><div class="d">I evaluated a cross-encoder and declined to ship it &mdash; but on <b>a handful of manual queries, not a golden set.</b> Directionally right, not rigorous. Recorded that way, with three revisit triggers.</div></div>
+    </div>
+  </div>
+  <div class="rule"></div>
+  <div class="foot"><span>Seven tuning decisions are formally blocked on a golden set that doesn't exist yet &mdash; written down, not hidden</span><span class="brand">CampusBrain</span></div>
+</section>
+
+<!-- ================= 09 LESSONS ================= -->
+<section class="slide">
+  <div class="eyebrow">Lessons</div>
+  <div class="pageno">09 / 10</div>
+  <h2 class="head">What the demo never teaches</h2>
+  <div class="lessons">
+    <div class="lesson">Building the AI feature was the easy part.</div>
+    <div class="lesson">Reliability is <span class="hi">harder than generation</span>, and less visible.</div>
+    <div class="lesson">A good decision names the alternative it rejected.</div>
+    <div class="lesson">The best feature I shipped this month was <span class="ht">one I deleted</span>.</div>
+    <div class="lesson">Verify, don't reason &mdash; especially about your own fix.</div>
+    <div class="lesson">A system that admits what it doesn't know is more useful than one that sounds certain.</div>
+  </div>
+  <div class="rule"></div>
+  <div class="foot"><span>Six lessons &middot; one thesis</span><span class="brand">CampusBrain</span></div>
+</section>
+
+<!-- ================= 10 CLOSE ================= -->
+<section class="slide">
+  <div class="eyebrow">Close</div>
+  <div class="pageno">10 / 10</div>
+  <h2 class="head">CampusBrain</h2>
+  <div class="sub">A production-oriented AI knowledge platform &mdash; and an argument about engineering honesty.</div>
+  <div class="three">
+    <div class="card">
+      <svg class="ic" style="color:var(--blue)"><use href="#i-info"/></svg>
+      <div class="k">What it is</div>
+      <p>A multi-tenant knowledge platform answering questions over an institution's own documents, with inline citations and an explicit refusal when nothing in the corpus is close enough.</p>
+    </div>
+    <div class="card">
+      <svg class="ic" style="color:var(--teal-mid)"><use href="#i-book"/></svg>
+      <div class="k">What I learned</div>
+      <p>The operating layer <i>is</i> the product. Durability, isolation, cost attribution and honest uncertainty took far longer than the retrieval pipeline, and they're what make it trustworthy.</p>
+    </div>
+    <div class="card">
+      <svg class="ic" style="color:var(--ink)"><use href="#i-flag"/></svg>
+      <div class="k">Why it exists</div>
+      <p>To show I can design, operate and debug a system under real constraints &mdash; and know the difference between what I've measured and what I've merely assumed.</p>
+    </div>
+  </div>
+  <div class="cta">
+    <div class="q">I'd value critique from backend, platform and AI engineers &mdash;<br>particularly on the queue choice and the refusal threshold.</div>
+    <div class="s">Those are the two decisions I'm least certain about. Every trade-off, including the reversed ones, is written down.</div>
+  </div>
+  <div class="rule"></div>
+  <div class="foot"><span>Production&#8209;oriented &middot; not production&#8209;ready &middot; and precise about the difference</span><span class="brand">CampusBrain</span></div>
+</section>
+
+</div>
+</body>
+</html>
