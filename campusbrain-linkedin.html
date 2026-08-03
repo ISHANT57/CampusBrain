@@ -50,8 +50,12 @@
   .note p{color:#8B96A8;font-size:13.5px;margin-top:8px;line-height:1.65}
 
   /* ---------- page shell ---------- */
+  /* padding-bottom must clear the footer rule, which is absolutely positioned
+     at bottom:104px. At the previous 96px the content box ended 8px BELOW that
+     rule, so any page whose content reached the bottom had its last line struck
+     through by the hairline. 140px leaves 36px of clearance. */
   .pg{width:1080px;height:1350px;background:var(--paper);position:relative;overflow:hidden;
-    box-shadow:0 30px 70px -18px rgba(2,6,23,.6);padding:82px 80px 96px;display:flex;flex-direction:column}
+    box-shadow:0 30px 70px -18px rgba(2,6,23,.6);padding:82px 80px 140px;display:flex;flex-direction:column}
   .kick{font-size:21px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--blue)}
   .kick.g{color:var(--green)} .kick.r{color:var(--red)} .kick.a{color:var(--amber)}
   h2{font-size:68px;line-height:1.04;font-weight:800;letter-spacing:-.035em;margin-top:30px}
@@ -158,6 +162,22 @@
   .srow .txt{font-size:24px;line-height:1.4;color:var(--body)}
   .srow .txt b{color:var(--ink);font-weight:700}
 
+  /* ---------- honest-caveat callout ----------
+     Used where a page would otherwise imply a stronger guarantee than the
+     system actually makes. Visually distinct from the numbered stack above it
+     so it reads as a qualification, not a fifth bullet. */
+  .caveat{border:1px solid #FEDF89;background:var(--amber-wash);border-radius:18px;padding:30px 32px;margin-top:auto;margin-bottom:12px}
+  .caveat .ct{font-size:19px;font-weight:700;letter-spacing:.13em;text-transform:uppercase;color:var(--amber)}
+  .caveat .cp{font-size:24px;line-height:1.45;color:#7A4A0B;margin-top:14px}
+  .caveat .cp b{color:#5A3708;font-weight:700}
+
+  /* ---------- links row (close page) ---------- */
+  .links{display:flex;flex-direction:column;gap:14px;margin-top:34px}
+  .lnk{display:flex;align-items:baseline;gap:16px;border:1px solid #2A3346;border-radius:15px;padding:22px 26px;background:#111A2C}
+  .lnk .lt{font-size:19px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#7DA2FF;white-space:nowrap}
+  .lnk .lu{font-size:22px;color:#C6CFDC;word-break:break-all}
+  .lnk .ln{font-size:19px;color:#71809A}
+
   /* ---------- close ---------- */
   .close{background:var(--ink)}
   .close .kick{color:#7DA2FF}
@@ -212,15 +232,32 @@
 
 <!-- ============================== 02 ============================== -->
 <section class="pg">
-  <div class="kick">The problem</div>
-  <h2>A demo has one path.<br>A system has all of them.</h2>
-  <div class="lede">The tutorial version does upload &rarr; chunk &rarr; embed &rarr; answer. Every box works, and none of them says what happens when the process dies <b>between two of them.</b></div>
-  <div class="stmt">
-    Changing one thing &mdash; upload returns <span class="hi">202 Accepted</span> in under a second, and the work continues without the request &mdash; forces almost everything else in this system to exist.
+  <div class="kick">Multi-tenancy</div>
+  <h2 class="sm">One college reading another's data ends the product.</h2>
+  <div class="lede">So isolation isn't a filter someone remembers to add. It is the only way the code can express a query at all.</div>
+  <div class="stack">
+    <div class="st">
+      <div class="n">01</div>
+      <div><div class="h">The tenant comes from a verified credential</div>
+      <div class="p">Never from a request body or a query parameter. <b>A client cannot ask to be a different tenant</b>, because it never states which tenant it is.</div></div>
+    </div>
+    <div class="st">
+      <div class="n">02</div>
+      <div><div class="h">Scoping is structural, not remembered</div>
+      <div class="p">Repositories take <span class="mono">org_id</span> at construction and every method filters on it. A future method cannot forget the check &mdash; there is <b>no unscoped way to query</b>.</div></div>
+    </div>
+    <div class="st">
+      <div class="n">03</div>
+      <div><div class="h">Isolation extends to the vector store</div>
+      <div class="p">Each tenant gets its own collection, so a similarity search cannot reach another institution's embeddings even if a filter were wrong.</div></div>
+    </div>
   </div>
-  <div class="lede" style="margin-top:34px">Durable queue. Atomic claim. Lease expiry. Bounded retry. Idempotent re&#8209;index. Tenant scoping on every read. An audit row in the same transaction.<br><br><b>None of that is an AI problem.</b></div>
+  <div class="caveat">
+    <div class="ct">And the honest exception</div>
+    <div class="cp">Chat <b>does</b> take the tenant from the URL path &mdash; deliberately <b>not an authorization boundary.</b> Acceptable only because every chat corpus is already public. Uploads, documents and search resolve it from a verified token instead.</div>
+  </div>
   <div class="hair"></div>
-  <div class="base"><div class="who">CampusBrain <span>&middot; the work after the demo</span></div><div class="num">02 / 10</div></div>
+  <div class="base"><div class="who">CampusBrain <span>&middot; the highest-stakes requirement</span></div><div class="num">02 / 10</div></div>
 </section>
 
 <!-- ============================== 03 ============================== -->
@@ -255,7 +292,7 @@
 <section class="pg">
   <div class="kick">Trade-off 01</div>
   <h2>Postgres for the job queue. Not Redis.</h2>
-  <div class="lede">Redis is faster and it is the conventional answer. I still chose the slower one.</div>
+  <div class="lede">Upload returns <b>202 Accepted</b> in under a second and the work continues without the request. That one choice is what forces a queue to exist &mdash; and Redis, the faster and more conventional answer, is not the one I picked.</div>
   <div class="stack">
     <div class="st">
       <div class="n">01</div>
@@ -369,9 +406,14 @@
   <div class="kick">Close</div>
   <h2>Tell me where this breaks down.</h2>
   <div class="lede">Every trade-off in this system is written down, including the ones I reversed. I'd rather have the critique than the compliment.</div>
+  <div class="links">
+    <div class="lnk"><span class="lt">Code</span><span class="lu">github.com/ISHANT57/CampusBrain</span></div>
+    <div class="lnk"><span class="lt">Live</span><span class="lu">campus&#8209;brain&#8209;inky.vercel.app/sitare</span></div>
+    <div class="lnk"><span class="lt">Reading</span><span class="lu">ENGINEERING_ROADMAP.md <span class="ln">&mdash; 17 decisions, with what each one rejected</span></span></div>
+  </div>
   <div class="ask">
     <div class="q">The two decisions I'm least sure about:</div>
-    <div class="a"><b style="color:#fff">1.</b> Postgres over Redis for the durable queue &mdash; what failure mode do you think I'm underweighting?<br><br><b style="color:#fff">2.</b> The similarity floor that triggers a refusal. It's currently a number with no validation behind it, and it decides whether a student gets an answer or a shrug.</div>
+    <div class="a"><b style="color:#fff">1.</b> Postgres over Redis for the durable queue &mdash; what failure mode do you think I'm underweighting?<br><br><b style="color:#fff">2.</b> The similarity floor that triggers a refusal. It's a number with no validation behind it, and it decides whether a student gets an answer or a shrug.</div>
   </div>
   <div class="hair"></div>
   <div class="base"><div class="who">CampusBrain <span>&middot; production&#8209;oriented, and precise about it</span></div><div class="num">10 / 10</div></div>
