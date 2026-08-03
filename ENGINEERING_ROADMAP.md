@@ -224,7 +224,7 @@ Two axes, deliberately. Design is cheap and Implementation is what counts.
 |---|---|---|---|---|---|---|---|---|---|
 | 2 | **Observability** | 100% | **0%** | **Designed** | **P0** | — | 1 d | Debuggability; unblocks all | ★★★★★ |
 | 1 | **Reliability** | 20% | **40%** | In Progress | **P0** | 2 | 3 d | Prevents data loss | ★★★★★ |
-| 7 | **Cost Engineering** | 30% | 0% | Not Started | P1 | 2 | 2 h | Makes spend knowable | ★★★★ |
+| 7 | **Cost Engineering** | 30% | **80%** | In Progress | P1 | 2 | 2 h | Makes spend knowable | ★★★★ |
 | 5 | **Evaluation** | 90%¹ | 0% | Not Started | P1 | 2 | 2 d | Unblocks 7 decisions | ★★★★★ |
 | 6 | **Performance** | 40% | 0% | Not Started | P1 | 5, 7 | 2 d | 25× ingest; latency | ★★★ |
 | 3 | **Security** | 30% | 0% | Not Started | P1 | 2 | 1 d | Closes OOM vector | ★★★★ |
@@ -345,7 +345,11 @@ classification: 5xx yes, 4xx no, daily quota never — INC-002) · **Status** No
 Gemini returns `usageMetadata` on every response; nothing reads it. Cost per answer is
 **unknown**, not small. Every optimisation in Pillar 6 is guesswork until this exists.
 Multi-tenant billing is impossible without a tenant dimension recorded from day one.
-**Effort** 2 h — six lines · **Interview** ★★★★ · **Status** Not started.
+**Effort** 2 h — six lines · **Interview** ★★★★ · **Status** Implemented (ADR-013,
+2026-08-03), backend only. `usage_logs` + `GET /api/v1/usage/summary` exist and are tested;
+**not done:** a frontend dashboard rendering that endpoint (the brief asked for "admin
+dashboard metrics" — the metrics/API exist, the UI doesn't), and the pricing table is
+correctly `$0` for the free tier in use but has no real paid rates entered.
 
 ---
 
@@ -590,6 +594,49 @@ with attempts remaining reports as `PENDING` again rather than a distinct in-bet
 request path → extract `run_worker_loop()` into a real second process (no redesign, same
 function). Job rate > ~100/s or fan-out across machines → Redis/arq, jobs table remains the
 source of truth in the meantime.
+
+---
+
+**ADR-013 — Token usage as a raw ledger, cost computed at read time** · Accepted · 2026-08-03
+**Context.** P1-6: Gemini returns `usageMetadata` on every response; nothing read it. Cost
+per answer was unknown, not small, and every Pillar 6 (Performance) optimisation was
+guesswork without it.
+**Decision.** `LLMProvider.generate()`/`generate_stream()` now return/yield a small result
+type carrying `TokenUsage` alongside the text, rather than usage traveling through a side
+channel — a provider abstraction that hides what a call actually cost would be lying about
+its own return value. Streaming is the interesting case: Gemini reports `usageMetadata` once
+the response is complete, not per-token, so `generate_stream()`'s contract is a final
+zero-text sentinel chunk carrying it — every other chunk's `usage` is `None`.
+`usage_logs` is a dumb ledger: token counts and the model that produced them, nothing derived.
+Cost is computed at **read time** (`usage_service.summary()`) from a small `$/1M tokens`
+table, so a price change never requires backfilling rows that were logged at the old price.
+Every model currently in use runs on Gemini's free tier (ADR-003), so the honest number today
+is `$0` — the table ships empty rather than with guessed rates, and an unlisted model prices
+at `$0`, never a fabricated estimate.
+**Fail-open, deliberately the opposite of the audit log.** `usage_service.record()` opens its
+own session, writes, and swallows any failure with a warning log. A cost-tracking write must
+never break the chat answer or the ingestion job it's describing — contrast with
+`audit_service.record()` (ADR from Pillar 8), which shares the caller's transaction because an
+untracked mutation is worse than a slow one. Two log-alike services, two deliberately opposite
+failure contracts, chosen for what each is actually protecting.
+**Attribution, honestly scoped.** Chat is anonymous (ADR-008) — no `user_id` to attach to
+`chat.generate` rows. Ingestion has a real uploading admin, so `IngestionJob` gained a
+`user_id` column threaded through to `index_document`, specifically so "top users" on the
+dashboard isn't permanently empty; it reads as "top uploaders by embedding spend," which is
+the honest shape of the data, not a shortcut. `embed()` (the cache-checked, high-volume query
+path in `retrieval_service.py`) was deliberately left alone — a new `embed_with_usage()` is
+used only by ingestion, which is low-volume enough to log every call without a new dependency
+or touching the cache path built in an earlier pillar.
+**Rejected.** Widening `embed()` itself — every caller, most of which only want the vector,
+would have to unpack a tuple. Storing cost per row — recomputing at read time means a price
+change or a corrected rate doesn't need a migration against history.
+**Trade-offs.** No frontend dashboard yet — the metrics and the API exist
+(`GET /api/v1/usage/summary`), rendering them is not. Pricing table has no real paid rates
+entered, so `estimated_cost_usd` is correctly `$0` until someone leaves the free tier and
+fills it in.
+**Migration trigger.** Leaving Gemini's free tier → populate `PRICING_USD_PER_MILLION_TOKENS`
+from the actual pricing page. A second embedding-heavy caller emerges → reconsider whether
+`embed()` itself should carry usage instead of a parallel method.
 
 ---
 
@@ -950,6 +997,7 @@ migrations. That is the one dimension where free infrastructure costs you nothin
 |---|---|
 | 2026-07-30 | Document created. §1–12 populated. ADR-001/002 imported from `PILLAR_02_OBSERVABILITY.md`; ADR-003–011 back-filled from code comments and `DEPLOYMENT_JOURNAL.md`. INC-001–008 recovered. Baseline scorecard 3.5/10. Redis premise corrected. Verified `git diff --stat HEAD -- backend/ frontend/` empty → all pillars 0% implemented |
 | 2026-08-03 | Pillar 2 (Observability) implemented and verified against real Postgres/Qdrant — logging, request correlation, `/metrics`, `/health/ready`. Pillar 7 (Cost) partially: query-embedding cache (Upstash), not token metering. Retry classification (P1-5) implemented. Rate-limit gaps (P2-14) closed. Audit logging added (upload only — no delete endpoint exists to audit). SSE streaming shipped end-to-end (backend + frontend), citation renumbering handled via a final structured event rather than incremental structured output. **P0-1 implemented** (ADR-012): Postgres-backed `ingestion_jobs` queue, in-process worker via `asyncio` + `lifespan`, `SKIP LOCKED` claiming, stale-lease reaper, minutes-scale backoff, and the upsert-then-prune idempotency fix for the destructive-reindex bug (P0-1(b)). M1 migration done. Reliability Impl 0% → 40% (P0-2 streaming-upload and P0-3 dedup remain open). |
+| 2026-08-03 (2) | **P1-6 implemented** (ADR-013): `LLMProvider`/`EmbeddingProvider` now surface `TokenUsage` alongside their result; `usage_logs` ledger + `GET /api/v1/usage/summary` (totals, daily series, top users, top documents), cost estimated at read time from a pricing table that's correctly empty (free tier). Fail-open by design, deliberately the opposite contract from the audit log. `IngestionJob` gained `user_id` so ingestion-side spend has someone to attribute to. Pillar 7 Impl 0% → 80% — no frontend dashboard yet, and no real paid pricing entered. 12 new tests. |
 
 ### Companion documents
 

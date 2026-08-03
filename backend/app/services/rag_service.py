@@ -7,7 +7,10 @@ from sqlalchemy.orm import Session
 
 from app.core import metrics
 from app.core.config import settings
+from app.core.observability import request_id_var
 from app.infrastructure.llm.provider import get_llm_provider
+from app.infrastructure.usage import TokenUsage
+from app.services import usage_service
 from app.services.guardrails import sanitize_context
 from app.services.prompt_templates import NO_EVIDENCE_RESPONSE, PROMPT_VERSION, build_rag_prompt
 from app.services.retrieval_service import hybrid_search
@@ -84,6 +87,7 @@ def _log_answer(
     org_id: int, question: str, history: list[dict] | None, hits: list[dict],
     best_semantic: float, refused: bool, citations: list[dict],
     retrieval_ms: float, llm_ms: float, ttft_ms: float | None = None,
+    usage: TokenUsage | None = None,
 ) -> None:
     # keyword_hits: chunks that reached the fused result with no semantic
     # contribution at all -- the early-warning signal for the keyword arm
@@ -121,7 +125,22 @@ def _log_answer(
         "retrieval_ms": round(retrieval_ms),
         "llm_ms": round(llm_ms),
         "ttft_ms": round(ttft_ms) if ttft_ms is not None else None,
+        "prompt_tokens": usage.prompt_tokens if usage else None,
+        "completion_tokens": usage.completion_tokens if usage else None,
+        "total_tokens": usage.total_tokens if usage else None,
     }})
+
+    # Chat is anonymous (ADR-008) -- no user_id to attribute this to.
+    # request_id ties this row back to the exact log line above.
+    if usage is not None:
+        usage_service.record(
+            org_id=org_id,
+            operation="chat.generate",
+            model=settings.gemini_llm_model,
+            usage=usage,
+            request_id=request_id_var.get(),
+            latency_ms=round(llm_ms),
+        )
 
 
 def _retrieve(
@@ -165,15 +184,15 @@ def answer_question(
 
     prompt = build_rag_prompt(question, sanitized_hits, history=history)
     t1 = time.perf_counter()
-    answer = get_llm_provider().generate(prompt)
+    result = get_llm_provider().generate(prompt)
     llm_ms = (time.perf_counter() - t1) * 1000
 
     # Only surface the sources the answer actually cites. Passing the
     # retrieval threshold means the corpus looked relevant; it does not mean
     # the model found an answer in every chunk, and it may still have declined
     # to answer at all.
-    answer, citations = keep_cited_sources(answer, sanitized_hits)
-    _log_answer(org_id, question, history, hits, best_semantic, False, citations, retrieval_ms, llm_ms)
+    answer, citations = keep_cited_sources(result.text, sanitized_hits)
+    _log_answer(org_id, question, history, hits, best_semantic, False, citations, retrieval_ms, llm_ms, usage=result.usage)
     return {"answer": answer, "citations": citations}
 
 
@@ -209,16 +228,21 @@ def stream_answer(
     t1 = time.perf_counter()
     ttft_ms: float | None = None
     chunks: list[str] = []
+    usage: TokenUsage | None = None
     try:
         for chunk in get_llm_provider().generate_stream(prompt):
+            if chunk.usage is not None:
+                usage = chunk.usage  # the final sentinel chunk; carries no text
+            if not chunk.text:
+                continue
             if ttft_ms is None:
                 ttft_ms = (time.perf_counter() - t1) * 1000
-            chunks.append(chunk)
-            yield {"type": "delta", "text": chunk}
+            chunks.append(chunk.text)
+            yield {"type": "delta", "text": chunk.text}
         llm_ms = (time.perf_counter() - t1) * 1000
         answer, citations = keep_cited_sources("".join(chunks), sanitized_hits)
         yield {"type": "done", "answer": answer, "citations": citations}
-        _log_answer(org_id, question, history, hits, best_semantic, False, citations, retrieval_ms, llm_ms, ttft_ms)
+        _log_answer(org_id, question, history, hits, best_semantic, False, citations, retrieval_ms, llm_ms, ttft_ms, usage)
     except GeneratorExit:
         # The client disconnected mid-stream (closed tab, StreamingResponse
         # torn down early) -- without this, an abandoned answer just vanishes
@@ -226,5 +250,5 @@ def stream_answer(
         # yield again after catching this; log, then propagate the close.
         llm_ms = (time.perf_counter() - t1) * 1000
         _, citations = keep_cited_sources("".join(chunks), sanitized_hits)
-        _log_answer(org_id, question, history, hits, best_semantic, False, citations, retrieval_ms, llm_ms, ttft_ms)
+        _log_answer(org_id, question, history, hits, best_semantic, False, citations, retrieval_ms, llm_ms, ttft_ms, usage)
         raise

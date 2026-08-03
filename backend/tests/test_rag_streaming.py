@@ -7,6 +7,8 @@ event whose answer/citations exactly match what keep_cited_sources would
 produce on the fully-assembled text.
 """
 
+from app.infrastructure.llm.base import StreamChunk
+from app.infrastructure.usage import TokenUsage
 from app.services import rag_service
 
 HITS = [
@@ -16,11 +18,41 @@ HITS = [
 
 
 class _FakeProvider:
-    def __init__(self, pieces):
+    def __init__(self, pieces, usage: TokenUsage | None = None):
         self._pieces = pieces
+        self._usage = usage
 
     def generate_stream(self, _prompt):
-        yield from self._pieces
+        for text in self._pieces:
+            yield StreamChunk(text=text)
+        if self._usage is not None:
+            yield StreamChunk(text="", usage=self._usage)
+
+
+class _FakeBlockingProvider:
+    def __init__(self, text, usage: TokenUsage | None = None):
+        self._text = text
+        self._usage = usage
+
+    def generate(self, _prompt):
+        from app.infrastructure.llm.base import GenerationResult
+        return GenerationResult(text=self._text, usage=self._usage)
+
+
+def test_answer_question_records_usage_from_the_blocking_response(monkeypatch):
+    monkeypatch.setattr(rag_service, "hybrid_search", lambda db, org_id, q, k: HITS)
+    monkeypatch.setattr(rag_service, "sanitize_context", lambda t: t)
+    usage = TokenUsage(prompt_tokens=50, completion_tokens=10, total_tokens=60)
+    monkeypatch.setattr(rag_service, "get_llm_provider", lambda: _FakeBlockingProvider("Fees are 50000 [1].", usage))
+
+    recorded = []
+    monkeypatch.setattr(rag_service.usage_service, "record", lambda **kw: recorded.append(kw))
+
+    result = rag_service.answer_question(db=None, org_id=1, question="how much are fees?")
+
+    assert result["answer"] == "Fees are 50000 [1]."
+    assert len(recorded) == 1
+    assert recorded[0]["usage"] == usage
 
 
 def test_refusal_short_circuits_without_ever_calling_the_llm(monkeypatch):
@@ -52,6 +84,23 @@ def test_deltas_forward_raw_chunks_then_done_carries_renumbered_citations(monkey
     assert done[0]["citations"] == [
         {"index": 1, "document_id": 10, "page_number": 1, "chunk_id": 1, "excerpt": "Fees are 50000."},
     ]
+
+
+def test_usage_from_the_final_chunk_is_recorded_once_streaming_completes(monkeypatch):
+    monkeypatch.setattr(rag_service, "hybrid_search", lambda db, org_id, q, k: HITS)
+    monkeypatch.setattr(rag_service, "sanitize_context", lambda t: t)
+    usage = TokenUsage(prompt_tokens=100, completion_tokens=20, total_tokens=120)
+    monkeypatch.setattr(rag_service, "get_llm_provider", lambda: _FakeProvider(["ok"], usage=usage))
+
+    recorded = []
+    monkeypatch.setattr(rag_service.usage_service, "record", lambda **kw: recorded.append(kw))
+
+    list(rag_service.stream_answer(db=None, org_id=1, question="how much are fees?"))
+
+    assert len(recorded) == 1
+    assert recorded[0]["usage"] == usage
+    assert recorded[0]["operation"] == "chat.generate"
+    assert recorded[0]["org_id"] == 1
 
 
 def test_a_client_disconnecting_mid_stream_still_logs_the_partial_answer(monkeypatch):

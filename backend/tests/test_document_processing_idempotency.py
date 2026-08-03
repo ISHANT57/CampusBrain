@@ -8,6 +8,7 @@ old, still-searchable version intact instead of the delete-first bug this
 replaces (old vectors gone from Qdrant, nothing to roll back to).
 """
 
+from app.infrastructure.usage import TokenUsage
 from app.models.chunk import Chunk
 from app.models.document import Document
 from app.services import document_processing_service as dps
@@ -45,15 +46,19 @@ class StubDB:
 
 
 class FakeEmbeddingProvider:
+    """No usage returned (None) -- these tests are about ordering, not cost
+    tracking, and returning None keeps usage_service.record() a no-op
+    (empty chunk_usages) so these tests don't need to stub it too."""
+
     def __init__(self, fail_after: int | None = None):
         self._calls = 0
         self._fail_after = fail_after
 
-    def embed(self, _text):
+    def embed_with_usage(self, _text):
         self._calls += 1
         if self._fail_after is not None and self._calls > self._fail_after:
             raise RuntimeError("embedding API down")
-        return [0.1, 0.2, 0.3]
+        return [0.1, 0.2, 0.3], None
 
 
 def _patch_pipeline(monkeypatch, call_order, provider, n_pages=2):
@@ -113,3 +118,43 @@ def test_no_stale_chunks_skips_delete_entirely(monkeypatch):
 
     assert [c[0] for c in call_order] == ["upsert"]
     assert db.deleted == []
+
+
+class _UsageTrackingProvider:
+    """Two chunks, two embed calls, each with its own usage -- the aggregate
+    recorded for the document should be the sum, not the last call's alone."""
+
+    def embed_with_usage(self, _text):
+        return [0.1, 0.2, 0.3], TokenUsage(prompt_tokens=10, completion_tokens=0, total_tokens=10)
+
+
+def test_ingestion_usage_is_aggregated_into_one_record_call_per_document(monkeypatch):
+    call_order = []
+    _patch_pipeline(monkeypatch, call_order, _UsageTrackingProvider())
+    db = StubDB(stale=[])
+
+    recorded = []
+    monkeypatch.setattr(dps.usage_service, "record", lambda **kw: recorded.append(kw))
+
+    dps.index_document(db, _document(), b"bytes", user_id=7)
+
+    assert len(recorded) == 1  # one row for the whole document, not one per chunk
+    assert recorded[0]["operation"] == "ingestion.embed"
+    assert recorded[0]["document_id"] == 1
+    assert recorded[0]["user_id"] == 7
+    assert recorded[0]["usage"].total_tokens == 20  # 2 chunks (n_pages default) * 10 each
+
+
+def test_no_usage_data_means_no_record_call(monkeypatch):
+    """FakeEmbeddingProvider (the ordering tests' fixture) returns usage=None
+    -- confirms that absence doesn't silently produce a zero-cost row."""
+    call_order = []
+    _patch_pipeline(monkeypatch, call_order, FakeEmbeddingProvider())
+    db = StubDB(stale=[])
+
+    recorded = []
+    monkeypatch.setattr(dps.usage_service, "record", lambda **kw: recorded.append(kw))
+
+    dps.index_document(db, _document(), b"bytes")
+
+    assert recorded == []

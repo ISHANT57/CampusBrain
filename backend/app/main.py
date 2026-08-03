@@ -20,6 +20,7 @@ from app.api.v1.auth import router as auth_router
 from app.api.v1.chat import router as chat_router
 from app.api.v1.documents import router as documents_router
 from app.api.v1.search import router as search_router
+from app.api.v1.usage import router as usage_router
 from app.core import database, metrics
 from app.core.config import settings
 from app.core.dependencies import require_search_access
@@ -57,6 +58,7 @@ app.include_router(documents_router, prefix="/api/v1")
 app.include_router(search_router, prefix="/api/v1")
 app.include_router(chat_router, prefix="/api/v1")
 app.include_router(audit_router, prefix="/api/v1")
+app.include_router(usage_router, prefix="/api/v1")
 
 
 @app.middleware("http")

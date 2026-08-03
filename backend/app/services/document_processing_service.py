@@ -1,7 +1,10 @@
+from app.core.config import settings
 from app.infrastructure.embeddings.provider import get_embedding_provider
+from app.infrastructure.usage import TokenUsage
 from app.models.chunk import Chunk
 from app.models.document import Document
 from app.repositories.vector_repository import delete_points, upsert_chunks
+from app.services import usage_service
 from app.services.chunking.recursive_chunker import chunk_pages
 from app.services.extraction.cleaner import clean_text
 from app.services.extraction.router import extract
@@ -15,9 +18,12 @@ def _infer_extraction_method(mime_type: str) -> str:
     return "unstructured"
 
 
-def index_document(db, document: Document, content: bytes) -> int:
+def index_document(db, document: Document, content: bytes, user_id: int | None = None) -> int:
     """Extract -> clean -> chunk -> embed -> index, for one document whose raw
     bytes the caller already has. Returns the number of chunks indexed.
+
+    user_id: who uploaded this, for cost attribution (Phase 3's "top users").
+    None from tools/ingest.py, which has no uploading user to attribute to.
 
     Used by both the API upload path (via ingestion_queue's worker) and
     tools/ingest.py directly — the only difference between an API upload and
@@ -71,10 +77,15 @@ def index_document(db, document: Document, content: bytes) -> int:
     db.flush()
 
     provider = get_embedding_provider()
-    points = [
-        {
+    points = []
+    chunk_usages: list[TokenUsage] = []
+    for chunk in chunk_rows:
+        vector, usage = provider.embed_with_usage(chunk.text)
+        if usage is not None:
+            chunk_usages.append(usage)
+        points.append({
             "chunk_id": chunk.id,
-            "vector": provider.embed(chunk.text),
+            "vector": vector,
             "payload": {
                 "org_id": document.org_id,
                 "document_id": document.id,
@@ -82,12 +93,27 @@ def index_document(db, document: Document, content: bytes) -> int:
                 "page_number": chunk.page_number,
                 "text": chunk.text,
             },
-        }
-        for chunk in chunk_rows
-    ]
+        })
 
     if points:
         upsert_chunks(document.org_id, points)
+
+    # One row per document, not per chunk: dozens of chunks share one
+    # ingestion job, and a usage_logs row per chunk would be a lot of rows
+    # for one meaningful number -- how much this document cost to embed.
+    if chunk_usages:
+        usage_service.record(
+            org_id=document.org_id,
+            document_id=document.id,
+            user_id=user_id,
+            operation="ingestion.embed",
+            model=settings.embedding_model,
+            usage=TokenUsage(
+                prompt_tokens=sum(u.prompt_tokens for u in chunk_usages),
+                completion_tokens=0,
+                total_tokens=sum(u.total_tokens for u in chunk_usages),
+            ),
+        )
 
     # Only now -- new content is live in both Postgres and Qdrant -- remove
     # what it superseded. A crash past this point is the narrow remaining

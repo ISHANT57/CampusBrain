@@ -73,7 +73,7 @@ def upload_document(
         resource_id=document.id,
         detail={"filename": filename, "size_bytes": len(content)},
     )
-    ingestion_queue.enqueue(db, org_id=org_id, document_id=document.id)
+    ingestion_queue.enqueue(db, org_id=org_id, document_id=document.id, user_id=user_id)
 
     # One commit for all three rows: a document with no ingestion job would
     # sit at PENDING forever with nothing to ever pick it up; one with no

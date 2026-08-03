@@ -49,11 +49,11 @@ def _backoff_seconds(attempt: int) -> float:
     return capped + random.uniform(0, capped * 0.25)
 
 
-def enqueue(db: Session, *, org_id: int, document_id: int) -> IngestionJob:
+def enqueue(db: Session, *, org_id: int, document_id: int, user_id: int | None = None) -> IngestionJob:
     """Create a pending job. Caller owns the transaction -- this only adds
     and flushes, so it commits atomically with whatever else the caller is
     persisting (the Document row, the audit log entry)."""
-    job = IngestionJob(org_id=org_id, document_id=document_id)
+    job = IngestionJob(org_id=org_id, document_id=document_id, user_id=user_id)
     db.add(job)
     db.flush()
     return job
@@ -155,7 +155,7 @@ def _process_one(job_id: int) -> None:
             document.status = DocumentStatus.PROCESSING
             db.commit()
             content = storage.get_object(document.storage_key)
-            index_document(db, document, content)
+            index_document(db, document, content, user_id=job.user_id)
             document.status = DocumentStatus.PROCESSED
             db.commit()
             mark_completed(db, job)

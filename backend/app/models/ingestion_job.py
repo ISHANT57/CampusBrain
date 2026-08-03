@@ -21,6 +21,12 @@ class IngestionJob(Base):
     id = Column(Integer, primary_key=True)
     org_id = Column(Integer, ForeignKey("organizations.id"), nullable=False, index=True)
     document_id = Column(Integer, ForeignKey("documents.id"), nullable=False, index=True)
+    # Nullable: tools/ingest.py creates jobs with no uploading user at all.
+    # Threaded through to index_document so ingestion-side token usage
+    # (usage_service, Phase 3) can attribute cost to whoever uploaded it --
+    # without this, "top users" on the cost dashboard would only ever be
+    # empty, since chat itself is anonymous (ADR-008).
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
     status = Column(
         Enum(IngestionJobStatus, name="ingestion_job_status", values_callable=lambda e: [x.value for x in e]),
         nullable=False,

@@ -82,7 +82,30 @@ def test_yields_text_pieces_in_order(monkeypatch):
         'data: {"candidates": [{"finishReason": "STOP"}]}',
     ]
     monkeypatch.setattr(gp.httpx, "stream", lambda *a, **k: _FakeStream(200, lines))
-    assert list(gp.GeminiProvider().generate_stream("prompt")) == ["Hello ", "world."]
+    chunks = list(gp.GeminiProvider().generate_stream("prompt"))
+    assert [c.text for c in chunks] == ["Hello ", "world."]
+
+
+def test_final_sentinel_chunk_carries_usage_when_present(monkeypatch):
+    _no_sleep(monkeypatch)
+    lines = [
+        'data: {"candidates": [{"content": {"parts": [{"text": "Hi"}]}}]}',
+        'data: {"candidates": [{"finishReason": "STOP"}], '
+        '"usageMetadata": {"promptTokenCount": 10, "candidatesTokenCount": 2, "totalTokenCount": 12}}',
+    ]
+    monkeypatch.setattr(gp.httpx, "stream", lambda *a, **k: _FakeStream(200, lines))
+    chunks = list(gp.GeminiProvider().generate_stream("prompt"))
+    assert [c.text for c in chunks] == ["Hi", ""]
+    assert chunks[0].usage is None
+    assert chunks[-1].usage.total_tokens == 12
+
+
+def test_no_usage_metadata_means_no_sentinel_chunk(monkeypatch):
+    _no_sleep(monkeypatch)
+    lines = ['data: {"candidates": [{"content": {"parts": [{"text": "Hi"}]}}]}']
+    monkeypatch.setattr(gp.httpx, "stream", lambda *a, **k: _FakeStream(200, lines))
+    chunks = list(gp.GeminiProvider().generate_stream("prompt"))
+    assert len(chunks) == 1  # no trailing empty-usage sentinel when there's nothing to report
 
 
 def test_empty_stream_raises_instead_of_silently_returning_nothing(monkeypatch):
@@ -103,7 +126,8 @@ def test_retryable_status_on_first_attempt_is_retried(monkeypatch):
         return _FakeStream(200, ['data: {"candidates": [{"content": {"parts": [{"text": "ok"}]}}]}'])
 
     monkeypatch.setattr(gp.httpx, "stream", fake_stream)
-    assert list(gp.GeminiProvider().generate_stream("prompt")) == ["ok"]
+    chunks = list(gp.GeminiProvider().generate_stream("prompt"))
+    assert [c.text for c in chunks] == ["ok"]
     assert attempts["n"] == 2
 
 
