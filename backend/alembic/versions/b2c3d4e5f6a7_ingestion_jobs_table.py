@@ -22,13 +22,26 @@ ingestion_job_status = sa.Enum(
 
 
 def upgrade() -> None:
-    ingestion_job_status.create(op.get_bind())
+    # checkfirst=True: a prior failed deploy attempt already left this type
+    # behind in production (create_table below used to try to create it a
+    # second time, unconditionally, which is the actual bug -- see the
+    # create_type=False column below). checkfirst makes this call safe to
+    # re-run against a database in either state.
+    ingestion_job_status.create(op.get_bind(), checkfirst=True)
     op.create_table(
         'ingestion_jobs',
         sa.Column('id', sa.Integer(), nullable=False),
         sa.Column('org_id', sa.Integer(), nullable=False),
         sa.Column('document_id', sa.Integer(), nullable=False),
-        sa.Column('status', ingestion_job_status, nullable=False, server_default='pending'),
+        sa.Column(
+            'status',
+            sa.Enum(
+                'pending', 'processing', 'completed', 'failed',
+                name='ingestion_job_status', create_type=False,
+            ),
+            nullable=False,
+            server_default='pending',
+        ),
         sa.Column('attempts', sa.Integer(), nullable=False, server_default='0'),
         sa.Column('max_attempts', sa.Integer(), nullable=False, server_default='5'),
         sa.Column('last_error', sa.Text(), nullable=True),
@@ -54,4 +67,4 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_ingestion_jobs_document_id'), table_name='ingestion_jobs')
     op.drop_index(op.f('ix_ingestion_jobs_org_id'), table_name='ingestion_jobs')
     op.drop_table('ingestion_jobs')
-    ingestion_job_status.drop(op.get_bind())
+    ingestion_job_status.drop(op.get_bind(), checkfirst=True)
