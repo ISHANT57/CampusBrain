@@ -1,6 +1,5 @@
-import httpx
-
 from app.core.config import settings
+from app.infrastructure.retry import post_with_retry
 
 # API contract confirmed against Google's current docs (2026):
 #   POST https://generativelanguage.googleapis.com/v1beta/models/{model}:embedContent
@@ -33,7 +32,7 @@ class GeminiEmbeddingProvider:
         return self._dimension
 
     def embed(self, text: str) -> list[float]:
-        response = httpx.post(
+        response = post_with_retry(
             _ENDPOINT.format(model=self._model),
             headers={"x-goog-api-key": settings.gemini_api_key},
             json={
@@ -43,5 +42,4 @@ class GeminiEmbeddingProvider:
             },
             timeout=60.0,
         )
-        response.raise_for_status()
         return response.json()["embedding"]["values"]

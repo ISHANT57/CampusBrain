@@ -3,7 +3,8 @@ import re
 from sqlalchemy import text as sql_text
 from sqlalchemy.orm import Session
 
-from app.infrastructure import vector_store
+from app.core.config import settings
+from app.infrastructure import cache, vector_store
 from app.infrastructure.embeddings.provider import get_embedding_provider
 
 # Reciprocal Rank Fusion constant. 60 is the value from the original RRF paper
@@ -11,12 +12,29 @@ from app.infrastructure.embeddings.provider import get_embedding_provider
 RRF_K = 60
 
 
+def _embed_query(query: str) -> list[float]:
+    """Embed a query, through the cache when one is configured.
+
+    Keyed on (model, dim) + query text: if the embedding model or the
+    Matryoshka truncation (ADR-009) ever changes, old cached vectors are
+    simply never looked up again rather than being served at the wrong
+    dimension.
+    """
+    namespace = f"{settings.embedding_model}:{settings.embedding_dim}"
+    cached = cache.get_embedding(namespace, query)
+    if cached is not None:
+        return cached
+    vector = get_embedding_provider().embed(query)
+    cache.set_embedding(namespace, query, vector)
+    return vector
+
+
 def semantic_search(org_id: int, query: str, top_k: int = 5) -> list[dict]:
     """Embed the query and return the top-k nearest chunks from this org's
     collection only. Cross-org isolation is structural: we only ever query
     org_{org_id}'s collection, never another's."""
     vector_store.ensure_collection(org_id)  # no-op if it exists; empty search if org never uploaded
-    query_vector = get_embedding_provider().embed(query)
+    query_vector = _embed_query(query)
 
     hits = vector_store.get_client().search(
         collection_name=vector_store.collection_name(org_id),

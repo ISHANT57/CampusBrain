@@ -1,5 +1,9 @@
+import json
+
 # pyrefly: ignore [missing-import]
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+# pyrefly: ignore [missing-import]
+from fastapi.responses import StreamingResponse
 # pyrefly: ignore [missing-import]
 from sqlalchemy.orm import Session
 
@@ -9,7 +13,7 @@ from app.models.organization import Organization
 from app.repositories.document_repository import DocumentRepository
 from app.schemas.answer import Citation
 from app.schemas.chat import ChatRequest, ChatResponse
-from app.services.rag_service import answer_question
+from app.services.rag_service import answer_question, stream_answer
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 
@@ -43,26 +47,47 @@ def _org_id(db: Session, slug: str) -> int:
     return org.id
 
 
+def _hydrate_citation(doc_repo: DocumentRepository, c: dict) -> dict:
+    """rag_service returns citations with a bare document_id; the filename
+    lookup lives here (the API layer), shared by the blocking and the SSE
+    response paths so there's exactly one place that resolves it."""
+    document = doc_repo.get(c["document_id"])
+    return {
+        "index": c["index"],
+        "document_id": c["document_id"],
+        "filename": document.filename if document else "(unknown)",
+        "page_number": c["page_number"],
+        "excerpt": c["excerpt"],
+    }
+
+
 def _answer(db: Session, org_id: int, payload: ChatRequest) -> ChatResponse:
     history = [turn.model_dump() for turn in payload.history]
     result = answer_question(
         db, org_id, payload.question, top_k=payload.top_k, history=history or None
     )
-
     doc_repo = DocumentRepository(db, org_id)
-    citations = []
-    for c in result["citations"]:
-        document = doc_repo.get(c["document_id"])
-        citations.append(
-            Citation(
-                index=c["index"],
-                document_id=c["document_id"],
-                filename=document.filename if document else "(unknown)",
-                page_number=c["page_number"],
-                excerpt=c["excerpt"],
-            )
-        )
+    citations = [Citation(**_hydrate_citation(doc_repo, c)) for c in result["citations"]]
     return ChatResponse(answer=result["answer"], citations=citations)
+
+
+def _stream_events(db: Session, org_id: int, payload: ChatRequest):
+    """SSE body for /chat/stream[/{org_slug}]. Same request contract as the
+    blocking endpoint, different transport: one "data: {json}\\n\\n" line per
+    event -- {"type": "delta", "text": ...} while the answer is generating,
+    then exactly one {"type": "done", "answer": ..., "citations": [...]}
+    carrying the final renumbered text and hydrated citations. See
+    rag_service.stream_answer's docstring for why renumbering can't be done
+    incrementally, chunk by chunk.
+    """
+    history = [turn.model_dump() for turn in payload.history]
+    doc_repo = DocumentRepository(db, org_id)
+    for event in stream_answer(
+        db, org_id, payload.question, top_k=payload.top_k, history=history or None
+    ):
+        if event["type"] == "done":
+            event = {**event, "citations": [_hydrate_citation(doc_repo, c) for c in event["citations"]]}
+        yield f"data: {json.dumps(event)}\n\n"
 
 
 # Anonymous callers have no user id, so rate_limit_key falls back to client IP
@@ -80,6 +105,28 @@ def _answer(db: Session, org_id: int, payload: ChatRequest) -> ChatResponse:
 @limiter.limit("120/minute")
 def chat(request: Request, payload: ChatRequest, db: Session = Depends(get_db)):
     return _answer(db, _org_id(db, DEFAULT_ORG_SLUG), payload)
+
+
+# Registered BEFORE /{org_slug}: that route is a single-segment catch-all, so
+# without this ordering "/chat/stream" would itself match org_slug="stream"
+# instead of ever reaching this route -- FastAPI matches in registration
+# order, and both patterns fit that URL. (An org literally named "stream"
+# would still be shadowed by this route; an accepted, narrow edge case, the
+# same shape as DEFAULT_ORG_SLUG's.)
+@router.post("/stream")
+@limiter.limit("120/minute")
+def chat_stream(request: Request, payload: ChatRequest, db: Session = Depends(get_db)):
+    org_id = _org_id(db, DEFAULT_ORG_SLUG)  # resolved eagerly, so an unknown org still 404s immediately
+    return StreamingResponse(_stream_events(db, org_id, payload), media_type="text/event-stream")
+
+
+@router.post("/stream/{org_slug}")
+@limiter.limit("120/minute")
+def chat_stream_for_org(
+    request: Request, org_slug: str, payload: ChatRequest, db: Session = Depends(get_db)
+):
+    org_id = _org_id(db, org_slug)
+    return StreamingResponse(_stream_events(db, org_id, payload), media_type="text/event-stream")
 
 
 @router.post("/{org_slug}", response_model=ChatResponse)

@@ -27,7 +27,7 @@ def post(monkeypatch):
         calls["json"] = kwargs.get("json")
         return calls["response"]
 
-    monkeypatch.setattr(gemini_provider.httpx, "post", fake_post)
+    monkeypatch.setattr(gemini_provider, "post_with_retry", fake_post)
     return calls
 
 

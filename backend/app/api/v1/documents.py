@@ -7,6 +7,7 @@ from fastapi import (
     Form,
     HTTPException,
     Query,
+    Request,
     UploadFile,
     status,
 )
@@ -15,6 +16,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.dependencies import require_role, require_search_access
+from app.core.rate_limit import limiter
 from app.models.chunk import Chunk
 from app.models.document import Document, DocumentStatus
 from app.models.user import User, UserRole
@@ -31,8 +33,15 @@ router = APIRouter(prefix="/documents", tags=["documents"])
 MAX_DOCUMENT_TEXT_CHARS = 250_000
 
 
+# No rate limit here previously (P0-2's aggravating factor): an authenticated
+# admin could fire unlimited concurrent uploads, each one a full read into a
+# 512Mi box. This doesn't fix the memory issue itself (that's the streaming-
+# upload fix, still open) — it bounds how many of them a leaked admin token
+# or a buggy client script can trigger per minute.
 @router.post("", response_model=DocumentRead, status_code=status.HTTP_201_CREATED)
+@limiter.limit("10/minute")
 async def upload(
+    request: Request,
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     collection_id: int | None = Form(None),
@@ -44,6 +53,7 @@ async def upload(
         document = upload_document(
             db,
             org_id=current_user.org_id,
+            user_id=current_user.id,
             collection_id=collection_id,
             filename=file.filename,
             content=content,

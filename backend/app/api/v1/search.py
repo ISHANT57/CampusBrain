@@ -1,10 +1,11 @@
 # pyrefly: ignore [missing-import]
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 # pyrefly: ignore [missing-import]
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.dependencies import require_search_access
+from app.core.rate_limit import limiter
 from app.schemas.search import SearchRequest, SearchResponse
 from app.services.retrieval_service import hybrid_search, keyword_search, semantic_search
 
@@ -20,8 +21,15 @@ router = APIRouter(prefix="/search", tags=["search"])
 #
 # The API-key path is off unless SERVICE_API_KEY is set, and it is wired to
 # this endpoint ONLY — a service key cannot upload documents or read /auth.
+#
+# Both callers already need credentials, so this rate limit is defense in
+# depth, not the primary control: a leaked admin token or service key could
+# otherwise be used as a free embedding-cost amplifier (P2-14) with no other
+# limit in front of it.
 @router.post("", response_model=SearchResponse)
+@limiter.limit("60/minute")
 def search(
+    request: Request,
     payload: SearchRequest,
     org_id: int = Depends(require_search_access),
     db: Session = Depends(get_db),
