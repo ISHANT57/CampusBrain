@@ -10,7 +10,7 @@ from app.core.config import settings
 from app.core.observability import request_id_var
 from app.infrastructure.llm.provider import get_llm_provider
 from app.infrastructure.usage import TokenUsage
-from app.services import usage_service
+from app.services import eval_service, usage_service
 from app.services.guardrails import sanitize_context
 from app.services.prompt_templates import NO_EVIDENCE_RESPONSE, PROMPT_VERSION, build_rag_prompt
 from app.services.retrieval_service import hybrid_search
@@ -88,6 +88,7 @@ def _log_answer(
     best_semantic: float, refused: bool, citations: list[dict],
     retrieval_ms: float, llm_ms: float, ttft_ms: float | None = None,
     usage: TokenUsage | None = None,
+    retrieval_query: str | None = None, answer_text: str = "",
 ) -> None:
     # keyword_hits: chunks that reached the fused result with no semantic
     # contribution at all -- the early-warning signal for the keyword arm
@@ -142,13 +143,38 @@ def _log_answer(
             latency_ms=round(llm_ms),
         )
 
+    # Phase 4: the durable substrate a future evaluation harness scores
+    # against. Recorded for refusals too -- a refusal IS a result, and
+    # refusal rate is one of the few signals measurable without labels.
+    eval_service.record_trace(
+        org_id=org_id,
+        question=question,
+        retrieval_query=retrieval_query or question,
+        hits=hits,
+        answer=answer_text,
+        citations=citations,
+        refused=refused,
+        best_semantic_score=round(best_semantic, 4),
+        prompt_version=PROMPT_VERSION,
+        llm_model=settings.gemini_llm_model,
+        embedding_model=settings.embedding_model,
+        retrieval_ms=round(retrieval_ms),
+        llm_ms=round(llm_ms),
+        request_id=request_id_var.get(),
+    )
+
 
 def _retrieve(
     db: Session, org_id: int, question: str, top_k: int, history: list[dict] | None,
-) -> tuple[list[dict], float, bool, float]:
+) -> tuple[list[dict], float, bool, float, str]:
     """Shared by answer_question and stream_answer: retrieval and the
     no-evidence guardrail are identical either way -- only what happens with
-    the LLM afterwards (block vs. stream) differs."""
+    the LLM afterwards (block vs. stream) differs.
+
+    Also returns the retrieval_query it built: that's what actually hit
+    retrieval, and it differs from `question` whenever history was folded in
+    -- an eval trace scored against the wrong one would be measuring
+    something that never ran."""
     # A follow-up like "what about semester 5?" has no retrievable content on
     # its own, so fold recent user turns into the retrieval query. Cheaper than
     # a dedicated LLM condensation call, and good enough for short follow-ups.
@@ -168,15 +194,16 @@ def _retrieve(
     # match on a common word is not evidence that the corpus answers this.
     best_semantic = max((h.get("semantic_score", 0.0) for h in hits), default=0.0)
     refused = not hits or best_semantic < RELEVANCE_THRESHOLD
-    return hits, best_semantic, refused, retrieval_ms
+    return hits, best_semantic, refused, retrieval_ms, retrieval_query
 
 
 def answer_question(
     db: Session, org_id: int, question: str, top_k: int = 5, history: list[dict] | None = None
 ) -> dict:
-    hits, best_semantic, refused, retrieval_ms = _retrieve(db, org_id, question, top_k, history)
+    hits, best_semantic, refused, retrieval_ms, retrieval_query = _retrieve(db, org_id, question, top_k, history)
     if refused:
-        _log_answer(org_id, question, history, hits, best_semantic, True, [], retrieval_ms, 0.0)
+        _log_answer(org_id, question, history, hits, best_semantic, True, [], retrieval_ms, 0.0,
+                    retrieval_query=retrieval_query, answer_text=NO_EVIDENCE_RESPONSE)
         return {"answer": NO_EVIDENCE_RESPONSE, "citations": []}
 
     # Sanitize retrieved text before it ever enters the prompt (M40).
@@ -192,7 +219,8 @@ def answer_question(
     # the model found an answer in every chunk, and it may still have declined
     # to answer at all.
     answer, citations = keep_cited_sources(result.text, sanitized_hits)
-    _log_answer(org_id, question, history, hits, best_semantic, False, citations, retrieval_ms, llm_ms, usage=result.usage)
+    _log_answer(org_id, question, history, hits, best_semantic, False, citations, retrieval_ms, llm_ms,
+                usage=result.usage, retrieval_query=retrieval_query, answer_text=answer)
     return {"answer": answer, "citations": citations}
 
 
@@ -215,11 +243,12 @@ def stream_answer(
     the final "done" event gets an identical result to the non-streaming
     endpoint -- streaming changes the transport, not the contract.
     """
-    hits, best_semantic, refused, retrieval_ms = _retrieve(db, org_id, question, top_k, history)
+    hits, best_semantic, refused, retrieval_ms, retrieval_query = _retrieve(db, org_id, question, top_k, history)
     if refused:
         yield {"type": "delta", "text": NO_EVIDENCE_RESPONSE}
         yield {"type": "done", "answer": NO_EVIDENCE_RESPONSE, "citations": []}
-        _log_answer(org_id, question, history, hits, best_semantic, True, [], retrieval_ms, 0.0)
+        _log_answer(org_id, question, history, hits, best_semantic, True, [], retrieval_ms, 0.0,
+                    retrieval_query=retrieval_query, answer_text=NO_EVIDENCE_RESPONSE)
         return
 
     sanitized_hits = [{**hit, "text": sanitize_context(hit["text"])} for hit in hits]
@@ -242,13 +271,15 @@ def stream_answer(
         llm_ms = (time.perf_counter() - t1) * 1000
         answer, citations = keep_cited_sources("".join(chunks), sanitized_hits)
         yield {"type": "done", "answer": answer, "citations": citations}
-        _log_answer(org_id, question, history, hits, best_semantic, False, citations, retrieval_ms, llm_ms, ttft_ms, usage)
+        _log_answer(org_id, question, history, hits, best_semantic, False, citations, retrieval_ms, llm_ms, ttft_ms,
+                    usage, retrieval_query=retrieval_query, answer_text=answer)
     except GeneratorExit:
         # The client disconnected mid-stream (closed tab, StreamingResponse
         # torn down early) -- without this, an abandoned answer just vanishes
         # from the record instead of showing up as a partial one. Must not
         # yield again after catching this; log, then propagate the close.
         llm_ms = (time.perf_counter() - t1) * 1000
-        _, citations = keep_cited_sources("".join(chunks), sanitized_hits)
-        _log_answer(org_id, question, history, hits, best_semantic, False, citations, retrieval_ms, llm_ms, ttft_ms, usage)
+        partial, citations = keep_cited_sources("".join(chunks), sanitized_hits)
+        _log_answer(org_id, question, history, hits, best_semantic, False, citations, retrieval_ms, llm_ms, ttft_ms,
+                    usage, retrieval_query=retrieval_query, answer_text=partial)
         raise

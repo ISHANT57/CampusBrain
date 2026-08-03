@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.database import get_db
+from app.core.observability import tenant_id_var, user_id_var
 from app.core.security import decode_access_token
 from app.models.user import User, UserRole
 
@@ -33,6 +34,11 @@ def get_current_user(
     user = db.get(User, int(payload["sub"]))
     if user is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
+    # Ambient, for the http_request log line only (Phase 7) -- see
+    # observability.py. Set here rather than in each endpoint because this is
+    # the single place a JWT caller is resolved.
+    tenant_id_var.set(user.org_id)
+    user_id_var.set(user.id)
     return user
 
 
@@ -85,6 +91,7 @@ def require_search_access(
         # comparison stops at the first differing byte, so response latency
         # correlates with how many leading characters are correct.
         if secrets.compare_digest(x_api_key, settings.service_api_key):
+            tenant_id_var.set(settings.service_api_key_org_id)  # user_id stays None: a machine caller has no user row
             return SearchPrincipal(org_id=settings.service_api_key_org_id, user_id=None)
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid API key")
 

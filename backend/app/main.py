@@ -19,12 +19,13 @@ from app.api.v1.audit import router as audit_router
 from app.api.v1.auth import router as auth_router
 from app.api.v1.chat import router as chat_router
 from app.api.v1.documents import router as documents_router
+from app.api.v1.evaluation import router as evaluation_router
 from app.api.v1.search import router as search_router
 from app.api.v1.usage import router as usage_router
 from app.core import database, metrics
 from app.core.config import settings
 from app.core.dependencies import SearchPrincipal, require_search_access
-from app.core.observability import configure_logging, request_id_var
+from app.core.observability import configure_logging, request_id_var, tenant_id_var, user_id_var
 from app.core.rate_limit import limiter
 from app.infrastructure import storage, vector_store
 from app.services import ingestion_queue
@@ -59,6 +60,7 @@ app.include_router(search_router, prefix="/api/v1")
 app.include_router(chat_router, prefix="/api/v1")
 app.include_router(audit_router, prefix="/api/v1")
 app.include_router(usage_router, prefix="/api/v1")
+app.include_router(evaluation_router, prefix="/api/v1")
 
 
 @app.middleware("http")
@@ -109,18 +111,43 @@ async def request_context(request: Request, call_next):
     incoming = request.headers.get("X-Request-Id")
     rid = incoming if incoming and len(incoming) <= 64 else str(uuid.uuid4())
     token = request_id_var.set(rid)
+    # Reset per request: ContextVars set inside a dependency persist on the
+    # task otherwise, so an anonymous request following an authenticated one
+    # could inherit the previous caller's tenant/user in its log line.
+    tenant_token = tenant_id_var.set(None)
+    user_token = user_id_var.set(None)
     started = time.perf_counter()
     try:
         response = await call_next(request)
+        # Read BEFORE the resets below: whichever auth dependency ran during
+        # call_next is what populated these.
+        tenant_id, user_id = tenant_id_var.get(), user_id_var.get()
     finally:
         request_id_var.reset(token)
+        tenant_id_var.reset(tenant_token)
+        user_id_var.reset(user_token)
     response.headers["X-Request-Id"] = rid
+
+    # Security headers (Phase 9). Deliberately minimal and API-appropriate:
+    # this service returns JSON, never HTML, so the headers that matter are
+    # the ones limiting what a browser does if a response is ever rendered
+    # or framed. No CSP: a JSON API has no scripts/styles to restrict, and a
+    # meaningful policy belongs on the Vercel-served frontend, not here. No
+    # HSTS: Render terminates TLS and already serves this over HTTPS only;
+    # setting max-age from the app risks pinning a header this deployment
+    # doesn't control the certificate lifecycle for.
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "no-referrer"
+
     logging.getLogger("http").info("request", extra={"event": {
         "event": "http_request",
         "method": request.method,
         "path": request.url.path,
         "status": response.status_code,
         "duration_ms": round((time.perf_counter() - started) * 1000),
+        "tenant_id": tenant_id,
+        "user_id": user_id,
     }})
     return response
 

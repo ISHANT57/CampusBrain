@@ -8,3 +8,4 @@ from app.models.chunk import Chunk  # noqa: F401
 from app.models.audit_log import AuditLog  # noqa: F401
 from app.models.ingestion_job import IngestionJob  # noqa: F401
 from app.models.usage_log import UsageLog  # noqa: F401
+from app.models.eval_trace import EvalTrace  # noqa: F401

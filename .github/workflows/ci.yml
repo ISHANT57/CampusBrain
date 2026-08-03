@@ -1,0 +1,148 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# A second push to the same PR cancels the first run -- CI feedback on a
+# superseded commit is wasted minutes on a free runner budget.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend (lint, tests)
+    runs-on: ubuntu-latest
+    services:
+      # Real Postgres so the integration tier actually runs in CI rather than
+      # being permanently skipped. Qdrant and object storage are NOT provided:
+      # Qdrant Cloud is a hosted free tier with no CI-safe local equivalent
+      # configured here, and Supabase Storage has no local stand-in in this
+      # repo -- so tests needing those stay out of CI and are documented as
+      # requiring `docker compose exec backend pytest` locally. Overstating
+      # CI coverage would be worse than naming the gap.
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: campusbrain
+          POSTGRES_PASSWORD: campusbrain_ci
+          POSTGRES_DB: campusbrain
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"  # matches backend/Dockerfile's python:3.12-slim
+          cache: pip
+
+      - name: Install lint tooling
+        # Not from requirements.txt: ruff is a CI/dev tool, and adding it to
+        # the runtime requirements would ship it into the 512 MB production
+        # image for no runtime benefit.
+        run: pip install ruff==0.14.5
+
+      - name: Lint (ruff)
+        working-directory: backend
+        # Rule set is tuned in backend/ruff.toml and verified clean across
+        # the tree, so this starts green -- any failure here is a real
+        # regression, not pre-existing debt a contributor has to wade through.
+        #
+        # No `ruff format --check` step, deliberately: this codebase is not
+        # ruff-format formatted (70 of 123 files would change), and the
+        # formatter reflows the long-form explanatory comment blocks that
+        # carry this project's design reasoning. Adopting it would mean one
+        # unreviewable 70-file commit plus ongoing damage to the comments,
+        # to catch zero defects. Revisit only as a deliberate, standalone
+        # formatting migration.
+        run: ruff check .
+
+      - name: Install runtime dependencies
+        working-directory: backend
+        # The full requirements.txt includes paddlepaddle/paddleocr/
+        # unstructured -- roughly a gigabyte of vision and ML wheels that the
+        # fast test tier never touches (tests/conftest.py stubs those leaf
+        # imports precisely so the suite is installable without them). CI
+        # installs only what the tests actually import.
+        run: |
+          pip install \
+            fastapi==0.115.0 uvicorn==0.30.6 sqlalchemy==2.0.35 alembic==1.13.3 \
+            psycopg2-binary==2.9.9 pydantic-settings==2.5.2 bcrypt==4.2.0 \
+            "python-jose[cryptography]==3.3.0" email-validator==2.2.0 boto3==1.43.53 \
+            python-multipart==0.0.12 langchain-text-splitters==0.3.0 \
+            qdrant-client==1.11.3 slowapi==0.1.9 pytest==8.3.3 httpx==0.28.1
+
+      - name: Run migrations
+        working-directory: backend
+        env:
+          DATABASE_URL: postgresql+psycopg2://campusbrain:campusbrain_ci@localhost:5432/campusbrain
+          JWT_SECRET_KEY: ci-only-not-a-real-secret
+          STORAGE_ENDPOINT: http://localhost:9000
+          STORAGE_REGION: us-east-1
+          STORAGE_ACCESS_KEY: ci
+          STORAGE_SECRET_KEY: ci
+        # Proves every migration applies cleanly from an empty database on
+        # every PR -- the failure mode this catches is a migration that works
+        # against a developer's already-migrated DB but not from scratch.
+        run: alembic upgrade head
+
+      - name: Run tests (fast tier)
+        working-directory: backend
+        env:
+          DATABASE_URL: postgresql+psycopg2://campusbrain:campusbrain_ci@localhost:5432/campusbrain
+          JWT_SECRET_KEY: ci-only-not-a-real-secret
+          STORAGE_ENDPOINT: http://localhost:9000
+          STORAGE_REGION: us-east-1
+          STORAGE_ACCESS_KEY: ci
+          STORAGE_SECRET_KEY: ci
+        # Explicit file list, not `pytest tests/`: the excluded files need
+        # Qdrant or real object storage (see the services comment above), and
+        # a green run that silently skipped half the suite is worse than a
+        # short one that says what it covered.
+        run: |
+          pytest -q \
+            tests/test_cache.py \
+            tests/test_retry.py \
+            tests/test_gemini_provider.py \
+            tests/test_gemini_streaming.py \
+            tests/test_rag_citations.py \
+            tests/test_rag_streaming.py \
+            tests/test_chat_org_routing.py \
+            tests/test_chat_stream_sse.py \
+            tests/test_audit_service.py \
+            tests/test_ingestion_queue.py \
+            tests/test_document_processing_idempotency.py \
+            tests/test_usage_service.py \
+            tests/test_service_api_key.py \
+            tests/test_redis_usage_boundary.py \
+            tests/test_eval_service.py
+
+  frontend:
+    name: Frontend (types, build)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install
+        working-directory: frontend
+        run: npm ci
+
+      - name: Type check + build
+        working-directory: frontend
+        # `npm run build` is `tsc && vite build` -- type checking and build
+        # verification in one step, which is exactly what's wanted here.
+        run: npm run build

@@ -17,6 +17,17 @@ import logging
 
 request_id_var: contextvars.ContextVar[str] = contextvars.ContextVar("request_id", default="-")
 
+# Same ambient-state argument as request_id: these are set once, by whichever
+# auth dependency resolved the caller, and read only by the http_request log
+# line in main.py. Threading them through every endpoint signature would
+# couple layers to values none of them use.
+#
+# int | None rather than a sentinel: anonymous chat genuinely has no user
+# (ADR-008) and a service API key genuinely has no user row, so "absent" is
+# a real, meaningful value here -- not a missing one.
+tenant_id_var: contextvars.ContextVar[int | None] = contextvars.ContextVar("tenant_id", default=None)
+user_id_var: contextvars.ContextVar[int | None] = contextvars.ContextVar("user_id", default=None)
+
 
 class RequestIdFilter(logging.Filter):
     """Inject the current request id into every record.

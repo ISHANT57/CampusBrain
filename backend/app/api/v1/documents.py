@@ -16,11 +16,13 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.dependencies import SearchPrincipal, require_role, require_search_access
 from app.core.rate_limit import limiter
+from app.infrastructure import storage
 from app.models.chunk import Chunk
 from app.models.document import Document, DocumentStatus
 from app.models.user import User, UserRole
 from app.repositories.document_repository import DocumentRepository
 from app.schemas.document import DocumentListResponse, DocumentPage, DocumentRead, DocumentText
+from app.services import audit_service
 from app.services.document_service import DocumentValidationError, upload_document
 
 router = APIRouter(prefix="/documents", tags=["documents"])
@@ -115,6 +117,47 @@ def get_document(
     if document is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
     return document
+
+
+@router.get("/{document_id}/download")
+def download_document(
+    document_id: int,
+    current_user: User = Depends(require_role(UserRole.ADMIN, UserRole.SUPER_ADMIN)),
+    db: Session = Depends(get_db),
+):
+    """A short-lived signed URL for the original file (Phase 9).
+
+    Signed URL, not a proxied byte stream: streaming a 100 MB blob back
+    through this process would put it in a 512 MB box's memory for no
+    reason, and the Supabase bucket stays Private either way -- the URL is
+    the sanctioned way to hand out temporary access to exactly one object.
+
+    Admin-only and 15 minutes, deliberately tighter than storage.py's
+    1-hour default: this hands out access to a raw uploaded document, so the
+    window should be long enough to click and short enough that a leaked URL
+    in a browser history or a chat log is stale.
+
+    Audited: handing out access to a file is exactly the kind of action that
+    needs to be attributable after the fact.
+    """
+    document = DocumentRepository(db, current_user.org_id).get(document_id)
+    if document is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
+    if not document.storage_key:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Document has no stored file")
+
+    url = storage.presigned_url(document.storage_key, expires_in=900)
+    audit_service.record(
+        db,
+        org_id=current_user.org_id,
+        user_id=current_user.id,
+        action="document.download",
+        resource_type="document",
+        resource_id=document.id,
+        detail={"filename": document.filename},
+    )
+    db.commit()
+    return {"url": url, "expires_in": 900}
 
 
 @router.get("/{document_id}/text", response_model=DocumentText)

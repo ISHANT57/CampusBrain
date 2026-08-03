@@ -7,9 +7,22 @@ event whose answer/citations exactly match what keep_cited_sources would
 produce on the fully-assembled text.
 """
 
+import pytest
+
 from app.infrastructure.llm.base import StreamChunk
 from app.infrastructure.usage import TokenUsage
 from app.services import rag_service
+
+
+@pytest.fixture(autouse=True)
+def _no_real_db_writes(monkeypatch):
+    """rag_service now records a usage row and an eval trace, both of which
+    open their own DB session. These tests have no database -- both services
+    fail open by design, so they'd still pass, but each would burn a
+    connection timeout first. Stub them out; their own test files cover the
+    real behavior."""
+    monkeypatch.setattr(rag_service.eval_service, "record_trace", lambda **kw: None)
+    monkeypatch.setattr(rag_service.usage_service, "record", lambda **kw: None)
 
 HITS = [
     {"chunk_id": 1, "document_id": 10, "page_number": 1, "text": "Fees are 50000.", "semantic_score": 0.9},

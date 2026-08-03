@@ -719,6 +719,95 @@ real call site.
 
 ---
 
+**ADR-016 - Phases 4/5/6/7/9 delivered together; each scoped to what exists**
+* Accepted * 2026-08-03
+
+**Phase 7 (observability expansion).** `tenant_id`/`user_id` added to the
+`http_request` log line via two new ContextVars set by whichever auth
+dependency resolved the caller (`get_current_user`, or the service-key branch
+of `require_search_access`) -- same ambient-state argument as `request_id`
+(ADR-001), no signature threading. The middleware **resets both at request
+start**: ContextVars set inside a dependency persist on the asyncio task, so
+without the reset an anonymous request following an authenticated one would
+log the previous caller's identity. That leak is the actual bug the reset
+prevents, and it has its own test. `model` was already on the `rag_answer`
+event since Pillar 2; not duplicated onto every HTTP line, where it would be
+null for all non-chat requests.
+
+**Phase 9 (security).** Three response headers on every response
+(`X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`,
+`Referrer-Policy: no-referrer`), set in the outermost middleware so a 404 or
+a 500 carries them too. **No CSP** -- this service returns JSON, never HTML,
+so there are no scripts/styles to restrict and a real policy belongs on the
+Vercel-served frontend. **No HSTS** -- Render terminates TLS and already
+serves HTTPS-only; emitting `max-age` from an app that doesn't control the
+certificate lifecycle risks pinning a promise the deployment can't keep.
+Signed URLs: `storage.presigned_url()` already existed but had **no caller** --
+now wired to `GET /documents/{id}/download` at 15 minutes (tighter than the
+1-hour default, because this hands out a raw uploaded document), admin-only
+and audited. Returns a URL rather than proxying bytes: streaming a 100 MB blob
+back through a 512 MB box is pointless when the bucket can serve it directly.
+RBAC and cross-tenant isolation were already structural (`OrgScopedRepository`,
+credential-derived `org_id`); Phase 5's tests now *prove* that rather than
+assuming it. Dependency upgrades: **not done** -- `pip list --outdated`
+couldn't run in this environment, so no version claims are made here.
+
+**Phase 4 (evaluation infrastructure) -- infrastructure only, no metrics.**
+`eval_traces` records, per answer: question, the **retrieval_query that
+actually ran** (different from the question whenever history was folded in --
+scoring against the wrong one would measure something that never executed),
+retrieved chunk ids + their *semantic* scores (not the fused RRF score;
+mixing those scales is the unit error section 10 already calls this project's
+best story), the answer, cited chunk ids, refusal flag, versions and timings.
+Deliberately **no `recall`/`precision`/`groundedness`/`hallucination_rate`
+columns**: all four need a labelled golden set that does not exist (P1-7), and
+a column holding a number nothing computed is worse than an absent one -- it
+gets quoted. `GET /api/v1/evaluation/stats` returns only label-free signals
+(refusal rate, uncited-answer rate, mean best-semantic-score) plus
+`scored_metrics_available: false` and a note saying why. Two tests assert the
+absence of the fabricated metrics, one at the service layer and one at the
+HTTP boundary. Traces are recorded for refusals too -- a refusal is a result,
+and refusal rate is the one quality signal measurable without labels.
+Fail-open, like `usage_service` and unlike the audit log.
+
+**Phase 5 (integration tests).** `tests/test_integration_api.py` covers what
+only a real database can prove: that `FOR UPDATE SKIP LOCKED` genuinely
+prevents double-claiming, that `attempts` increments at claim time so a crash
+loop is bounded, that a stale lease **is** reaped and a fresh one **is not**,
+plus RBAC (anonymous/student/admin) on every endpoint added in Phases 3/4/9
+and cross-tenant 404s. Existing coverage was not duplicated -- upload/RBAC
+lives in `test_security.py`, document reads in `test_document_read_api.py`,
+login/search audit rows in `test_audit_expansion.py`, retry/backoff logic in
+`test_ingestion_queue.py`.
+
+**Phase 6 (CI/CD).** `.github/workflows/ci.yml`: backend lint + migrations +
+the 84-test fast tier against a real Postgres service container, and frontend
+`tsc && vite build`. Both halves were run locally before committing, so CI
+starts green. Three honest scope calls, each recorded in the workflow itself:
+- **Ruff rule set is `E,F` only**, chosen by running each candidate against
+  the tree. `B008` fires 37 times on FastAPI's required `Depends()`-in-a-
+  default idiom; `UP007`/`UP035` fire 64 times inside Alembic's own generated
+  migration headers; `I001` fires 148 times because this codebase interleaves
+  load-bearing `# pyrefly: ignore` comments between imports. Enabling those
+  would mean CI failing on style nobody agreed to, which is CI people learn
+  to bypass.
+- **No `ruff format` check.** 70 of 123 files would change, and the formatter
+  reflows the long-form comment blocks carrying this project's reasoning.
+  That's one unreviewable commit plus ongoing damage, for zero defects caught.
+- **Qdrant and object storage are not in CI**, so the tests needing them
+  (`test_security.py`, `test_document_read_api.py`, `test_audit_expansion.py`,
+  `test_integration_api.py`, `test_observability.py`,
+  `test_security_headers.py`) still require `docker compose exec backend
+  python -m pytest` locally. A green CI badge that silently skipped half the
+  suite would be worse than one that names its own gap.
+
+Also fixed here: **`backend/pytest.ini` with `pythonpath = .`** -- a bare
+`pytest` (the form every test docstring in this repo documents) previously
+failed every import with `No module named 'app'`; only `python -m pytest`
+worked. Found by actually running the documented command in a Codespace.
+
+---
+
 ## 6. Production Incident Library
 
 Append-only. All eight are **real**, recovered from code comments and
@@ -912,7 +1001,7 @@ Legend: ✅ done · 🟡 partial · ❌ missing · N/A justified
 | Input validation | 🟡 | MIME/extension **pair** allow-list, real-byte sniffing, Pydantic bounds | Size checked **after** buffering (P0-2) | **P0** |
 | Rate limiting | 🟡 | 120/min chat, 5/min login; key **verified** before bucketing | None on `/search`, `/documents` (P2-14); in-memory (P2-9) | P1 |
 | Secret management | 🟡 | Env vars; credentials never logged; key hashes truncated | No rotation procedure | P3 |
-| Audit logging | 🟡 | Upload, login, search — fails **closed** (ADR-013/014) | No delete/role-change endpoint exists yet to audit | P2 |
+| Audit logging | 🟡 | Upload, login, search, download — fails **closed** (ADR-013/014) | No delete/role-change endpoint exists yet to audit | P2 |
 | Prompt-injection defence | 🟡 | 5 regexes on retrieved text; admin-only upload bounds the surface | No role separation; **history unsanitised** (P2-12) | P1 |
 | PII handling | ❌ | Manual corpus curation | No detection/redaction; no enforcement | P3 (see §4 P3) |
 | **Observability** | ❌ | 500s logged w/ traceback; `/health` correctly dependency-free | Everything in Pillar 2 | **P0** |
@@ -920,7 +1009,7 @@ Legend: ✅ done · 🟡 partial · ❌ missing · N/A justified
 | Graceful degradation | 🟡 | Refuses rather than hallucinating when retrieval is weak | No circuit breaker; storage-failure path undefined | P1 |
 | Monitoring | ❌ | — | Metrics, canary | **P0** |
 | Alerting | ❌ | — | Canary + threshold alerts | P1 |
-| **Evaluation** | ❌ | — | Golden set, metrics, judge, CI gate | P1 |
+| **Evaluation** | 🟡 | `eval_traces` substrate + label-free signals (ADR-016) | Golden set, scored metrics, judge, CI gate | P1 |
 | Caching | ❌ | — | Query embedding, chunk content-hash, answer | P1 |
 | Cost controls | ❌ | Rate limits are the only indirect control | `usageMetadata`, per-tenant attribution, budgets | P1 |
 | Performance | 🟡 | GIN index; over-fetch; payload denormalised to avoid a join | 248 s ingest (P1-8); no cache; N+1 (D9) | P1 |
@@ -929,7 +1018,7 @@ Legend: ✅ done · 🟡 partial · ❌ missing · N/A justified
 | Compliance | N/A | Public corpus, no accounts for students | Revisit on any non-public content | — |
 | Documentation | 🟡 | Extensive; 3 load-bearing claims are **wrong** (D8) | Reconcile | P2 |
 | Testing | 🟡 | 48 tests, 7 files; genuinely subtle cases covered | Extraction untestable (D7); no failure tests | P2 |
-| CI/CD | ❌ | Manual; `render-start.sh` runs migrations on boot | No CI at all (P2-16) | P2 |
+| CI/CD | 🟡 | GitHub Actions: lint, migrations, 84-test fast tier, frontend build (ADR-016) | Qdrant/storage tiers not in CI | P2 |
 | Deployment | 🟡 | Reproducible; migrations + idempotent admin bootstrap on boot | No staging, no rollback procedure | P2 |
 
 ---
@@ -1090,3 +1179,4 @@ migrations. That is the one dimension where free infrastructure costs you nothin
 | `LLM_ENGINEERING.md` | 190-page conceptual companion. Ch 11–14 are the Pillar 5 design |
 | `DEPLOYMENT_JOURNAL.md` | Primary source for INC-002/003/004 |
 | `DOCUMENTATION.md` | ⚠️ Stale in 3 load-bearing places (D8). See `LLM_ENGINEERING.md` Appendix A |
+| 2026-08-03 (5) | **Phases 4/5/6/7/9** (ADR-016). Phase 7: `tenant_id`/`user_id` on the http_request log line, with a per-request ContextVar reset so one caller's identity can't leak into the next request's log. Phase 9: three security headers on every response (no CSP/HSTS, reasons recorded), plus `GET /documents/{id}/download` finally wiring up the `presigned_url()` helper that had no caller -- 15-min, admin-only, audited. Phase 4: `eval_traces` table + `/evaluation/stats`, infrastructure only -- explicitly NO recall/precision/groundedness columns, since no golden set exists to compute them (2 tests assert their absence). Phase 5: integration tests for SKIP LOCKED double-claim prevention, stale-lease reap/no-reap, RBAC on all new endpoints, cross-tenant 404s. Phase 6: CI (lint + migrations + 84-test fast tier on real Postgres, frontend build), both halves verified green locally first; ruff limited to E,F after measuring that B008/UP007/I001 fire 249 times on FastAPI/Alembic/pyrefly idioms, and no ruff-format check (70 files would change). Also fixed `pytest.ini pythonpath` so the documented bare `pytest` command works. 89 fast tests + 14 new integration tests. |

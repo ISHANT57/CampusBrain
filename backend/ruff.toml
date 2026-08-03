@@ -1,0 +1,44 @@
+# Rule set chosen by running each candidate against this codebase, not by
+# copying a default. CI that fails on 100+ findings nobody agreed to is CI
+# people learn to bypass, and a linter that's wrong about a framework's
+# required idiom trains contributors to ignore it.
+line-length = 120  # the width this codebase is already written at
+
+[lint]
+# E + F (pycodestyle errors + pyflakes) catch actual defects: undefined
+# names, unused imports, redefinitions, broken f-strings. Verified clean
+# across the whole tree, so CI starts green and any future failure is a real
+# regression rather than pre-existing debt.
+select = ["E", "F"]
+
+ignore = [
+    # This codebase's comments are load-bearing -- they carry the reasoning
+    # behind non-obvious decisions, and several are deliberately long-form.
+    # Rewrapping them to satisfy a column count would damage them and catch
+    # no defect.
+    "E501",
+]
+
+# Rules evaluated and deliberately NOT enabled, with the reason -- so a
+# future contributor doesn't "fix the missing rules" and reintroduce 100+
+# false positives:
+#
+#   B008 (function call in default argument) -- 37 hits, every one of them
+#       FastAPI's `Depends(...)` / `Query(...)` idiom, which the framework
+#       REQUIRES in a default. The rule is correct in general and wrong for
+#       every FastAPI route ever written.
+#   UP007 / UP035 (modern typing syntax) -- 64 hits, almost all inside
+#       alembic/versions/, which Alembic itself generates from a template
+#       using `Union[str, None]` and `typing.Sequence`. Rewriting generated
+#       migration headers to satisfy a style rule edits files nobody reads
+#       and that the next `alembic revision` regenerates the old way.
+#   I001 (import sorting) -- 148 hits, caused by the `# pyrefly: ignore`
+#       comments interleaved between imports throughout this codebase. Those
+#       comments are load-bearing (they suppress real type-checker errors on
+#       specific lines) and isort moves imports out from under them.
+
+[lint.per-file-ignores]
+# Model/router aggregation modules import purely for side effects
+# (SQLAlchemy metadata registration, FastAPI route registration) --
+# "unused" is precisely the point, and Alembic autogenerate breaks without it.
+"app/models/__init__.py" = ["F401"]
