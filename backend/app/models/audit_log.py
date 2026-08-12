@@ -9,7 +9,13 @@ class AuditLog(Base):
 
     id = Column(Integer, primary_key=True)
     org_id = Column(Integer, ForeignKey("organizations.id"), nullable=False, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    # Nullable: /search accepts a service API key (SearchPrincipal.user_id is
+    # None for that caller — see app/core/dependencies.py) with no user row to
+    # attribute the call to. This was NOT NULL from the original admin-only
+    # audit trail and never relaxed when the search endpoint's logging was
+    # added, so every service-key search call violated the constraint and
+    # 500'd — see migration f3a1b2c4d5e6.
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
     # Dotted verb, e.g. "document.upload" -- room to grow into
     # "document.delete", "user.role_change" without a schema change.
     action = Column(String, nullable=False)
